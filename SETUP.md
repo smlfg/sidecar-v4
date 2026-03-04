@@ -62,7 +62,7 @@ In `~/.claude/settings.json` den minimax_watcher Hook durch sidecar_bridge erset
   "matcher": "Bash|Edit|Write",
   "hooks": [{
     "type": "command",
-    "command": "python3 /home/smlflg/Dokumente/Pläne/ClaudeCodeWorks/plugins/claude-hook/hooks/minimax_watcher.py",
+    "command": "python3 /home/smlflg/Dokumente/Pläne/ClaudeCodeWorks/plugins/claude-hook/hooks/minimax_watcher.py  # ALTER PFAD",
     "timeout": 15
   }]
 }
@@ -74,7 +74,7 @@ In `~/.claude/settings.json` den minimax_watcher Hook durch sidecar_bridge erset
   "matcher": "Bash|Edit|Write",
   "hooks": [{
     "type": "command",
-    "command": "python3 /home/smlflg/Dokumente/Pläne/ClaudeCodeWorks/plugins/claude-hook/hooks/sidecar_bridge.py",
+    "command": "python3 /home/smlflg/Dokumente/Pläne/ClaudeCodeWorks/plugins/claude-hook/hooks/sidecar_bridge.py  # TODO: nach ~/Projekte/Sidecar/hooks/ migrieren",
     "timeout": 5
   }]
 }
