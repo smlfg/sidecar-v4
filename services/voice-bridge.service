@@ -4,7 +4,7 @@ After=graphical-session.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 /home/smlflg/Dokumente/Pläne/ClaudeCodeWorks/plugins/claude-hook/sidecar/voice_bridge.py
+ExecStart=/usr/bin/python3 /home/smlflg/Projekte/Sidecar/voice_bridge.py
 Restart=on-failure
 RestartSec=5
 Environment=WHISPER_MODEL=medium
