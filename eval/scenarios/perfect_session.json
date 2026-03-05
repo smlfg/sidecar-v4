@@ -1,0 +1,99 @@
+{
+  "name": "perfect_session",
+  "description": "Research → Plan → Build → Test flow. No alarms expected.",
+  "expected_detections": [],
+  "events": [
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/docs/architecture.md"},
+      "had_error": false,
+      "turn": 1,
+      "response_text": "# Architecture\nMVC pattern with service layer."
+    },
+    {
+      "tool": "Grep",
+      "input": {"pattern": "class.*Service", "path": "/home/user/project/src/"},
+      "had_error": false,
+      "turn": 2,
+      "response_text": "services.py:5:class UserService:"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/services.py"},
+      "had_error": false,
+      "turn": 3,
+      "response_text": "class UserService:\n    def get_user(self, id): pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/models.py"},
+      "had_error": false,
+      "turn": 4,
+      "response_text": "class User:\n    id: int\n    name: str"
+    },
+    {
+      "tool": "Grep",
+      "input": {"pattern": "def get_user", "path": "/home/user/project/"},
+      "had_error": false,
+      "turn": 5,
+      "response_text": "services.py:6:    def get_user(self, id):"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/tests/test_services.py"},
+      "had_error": false,
+      "turn": 6,
+      "response_text": "def test_get_user(): assert svc.get_user(1) is None"
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/services.py",
+        "old_string": "    def get_user(self, id): pass",
+        "new_string": "    def get_user(self, id):\n        return self.repo.find(id)"
+      },
+      "had_error": false,
+      "turn": 7,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/tests/test_services.py",
+        "old_string": "def test_get_user(): assert svc.get_user(1) is None",
+        "new_string": "def test_get_user_existing():\n    svc.repo.store(User(id=1, name='Alice'))\n    assert svc.get_user(1).name == 'Alice'\n\ndef test_get_user_missing():\n    assert svc.get_user(999) is None"
+      },
+      "had_error": false,
+      "turn": 8,
+      "response_text": ""
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && python -m pytest tests/test_services.py -v"},
+      "had_error": false,
+      "turn": 9,
+      "response_text": "2 passed in 0.05s"
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && python -m pytest tests/ -v --tb=short"},
+      "had_error": false,
+      "turn": 10,
+      "response_text": "5 passed in 0.11s"
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && python -m flake8 src/ tests/"},
+      "had_error": false,
+      "turn": 11,
+      "response_text": ""
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && git add src/services.py tests/test_services.py && git commit -m 'feat: implement UserService.get_user with repo lookup'"},
+      "had_error": false,
+      "turn": 12,
+      "response_text": "[main a1b2c3d] feat: implement UserService.get_user with repo lookup"
+    }
+  ]
+}

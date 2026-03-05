@@ -1,0 +1,141 @@
+{
+  "name": "drift_scenario",
+  "description": "Starts in /home/user/project/src/, then suddenly edits files in /home/user/other-project/. Should trigger DRIFT detector.",
+  "expected_detections": ["DRIFT"],
+  "events": [
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/main.py"},
+      "had_error": false,
+      "turn": 1,
+      "response_text": "def main(): pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/utils.py"},
+      "had_error": false,
+      "turn": 2,
+      "response_text": "def helper(): pass"
+    },
+    {
+      "tool": "Grep",
+      "input": {"pattern": "def ", "path": "/home/user/project/src/"},
+      "had_error": false,
+      "turn": 3,
+      "response_text": "main.py:1:def main():"
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/main.py",
+        "old_string": "def main(): pass",
+        "new_string": "def main():\n    return 'ok'"
+      },
+      "had_error": false,
+      "turn": 4,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/utils.py",
+        "old_string": "def helper(): pass",
+        "new_string": "def helper():\n    return True"
+      },
+      "had_error": false,
+      "turn": 5,
+      "response_text": ""
+    },
+    {
+      "tool": "Write",
+      "input": {
+        "file_path": "/home/user/project/src/new_module.py",
+        "content": "# new module\n"
+      },
+      "had_error": false,
+      "turn": 6,
+      "response_text": ""
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/other-project/src/api.py"},
+      "had_error": false,
+      "turn": 7,
+      "response_text": "from flask import Flask\napp = Flask(__name__)"
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/other-project/src/api.py",
+        "old_string": "app = Flask(__name__)",
+        "new_string": "app = Flask(__name__, template_folder='templates')"
+      },
+      "had_error": false,
+      "turn": 8,
+      "response_text": ""
+    },
+    {
+      "tool": "Write",
+      "input": {
+        "file_path": "/home/user/other-project/src/models.py",
+        "content": "class Product:\n    pass\n"
+      },
+      "had_error": false,
+      "turn": 9,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/other-project/config/settings.py",
+        "old_string": "DATABASE_URL = 'sqlite:///db.sqlite3'",
+        "new_string": "DATABASE_URL = 'postgresql://localhost/mydb'"
+      },
+      "had_error": false,
+      "turn": 10,
+      "response_text": ""
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/other-project && python manage.py migrate"},
+      "had_error": false,
+      "turn": 11,
+      "response_text": "Migrations applied."
+    },
+    {
+      "tool": "Write",
+      "input": {
+        "file_path": "/home/user/other-project/src/views.py",
+        "content": "from models import Product\n\ndef list_products():\n    return []\n"
+      },
+      "had_error": false,
+      "turn": 12,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/other-project/src/api.py",
+        "old_string": "from flask import Flask",
+        "new_string": "from flask import Flask, jsonify"
+      },
+      "had_error": false,
+      "turn": 13,
+      "response_text": ""
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/other-project && python -m pytest tests/"},
+      "had_error": false,
+      "turn": 14,
+      "response_text": "3 passed"
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/other-project && git commit -am 'add product listing'"},
+      "had_error": false,
+      "turn": 15,
+      "response_text": "[main f1e2d3] add product listing"
+    }
+  ]
+}

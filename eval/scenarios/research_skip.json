@@ -1,0 +1,114 @@
+{
+  "name": "research_skip",
+  "description": "Goes straight to Edit/Write without any Read/Grep first. Should trigger YOLO and research_first enforcement.",
+  "expected_detections": ["YOLO"],
+  "events": [
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/auth.py",
+        "old_string": "def login(user, password):",
+        "new_string": "def login(user, password, remember_me=False):"
+      },
+      "had_error": false,
+      "turn": 1,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/auth.py",
+        "old_string": "return False",
+        "new_string": "return authenticate(user, password)"
+      },
+      "had_error": false,
+      "turn": 2,
+      "response_text": ""
+    },
+    {
+      "tool": "Write",
+      "input": {
+        "file_path": "/home/user/project/src/session.py",
+        "content": "import jwt\n\ndef create_session(user_id):\n    return jwt.encode({'user': user_id}, 'secret')\n"
+      },
+      "had_error": false,
+      "turn": 3,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/views.py",
+        "old_string": "from auth import login",
+        "new_string": "from auth import login\nfrom session import create_session"
+      },
+      "had_error": false,
+      "turn": 4,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/views.py",
+        "old_string": "return redirect('/dashboard')",
+        "new_string": "token = create_session(user.id)\nreturn redirect('/dashboard')"
+      },
+      "had_error": false,
+      "turn": 5,
+      "response_text": ""
+    },
+    {
+      "tool": "Write",
+      "input": {
+        "file_path": "/home/user/project/src/middleware.py",
+        "content": "from session import create_session\n\nclass SessionMiddleware:\n    def process_request(self, request):\n        pass\n"
+      },
+      "had_error": false,
+      "turn": 6,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/config.py",
+        "old_string": "SESSION_TIMEOUT = 3600",
+        "new_string": "SESSION_TIMEOUT = 86400"
+      },
+      "had_error": false,
+      "turn": 7,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/auth.py",
+        "old_string": "def logout(user):",
+        "new_string": "def logout(user, invalidate_all=False):"
+      },
+      "had_error": false,
+      "turn": 8,
+      "response_text": ""
+    },
+    {
+      "tool": "Write",
+      "input": {
+        "file_path": "/home/user/project/src/tokens.py",
+        "content": "def revoke_token(token_id):\n    pass\n"
+      },
+      "had_error": false,
+      "turn": 9,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/auth.py",
+        "old_string": "pass  # TODO: invalidate session",
+        "new_string": "from tokens import revoke_token\nrevoke_token(user.session_token)"
+      },
+      "had_error": false,
+      "turn": 10,
+      "response_text": ""
+    }
+  ]
+}

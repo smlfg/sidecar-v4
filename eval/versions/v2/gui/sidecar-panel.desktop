@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Sidecar Panel
+Comment=Claude Sidecar Control Panel
+Exec=/home/smlflg/Projekte/Sidecar/gui/run.sh
+Icon=preferences-system
+Type=Application
+Categories=Utility;Development;
+Terminal=false

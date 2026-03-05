@@ -1,0 +1,107 @@
+{
+  "name": "expensive_delegation",
+  "description": "Uses Agent tool with general-purpose subagent for trivial tasks solvable with Read/Grep. Should trigger cost warnings.",
+  "expected_detections": ["STALL"],
+  "events": [
+    {
+      "tool": "Agent",
+      "input": {
+        "subagent_type": "general-purpose",
+        "description": "Read the file /home/user/project/src/main.py and tell me what functions are defined in it"
+      },
+      "had_error": false,
+      "turn": 1,
+      "response_text": "The file contains: def main(), def setup()"
+    },
+    {
+      "tool": "Agent",
+      "input": {
+        "subagent_type": "general-purpose",
+        "description": "Search for all Python files in /home/user/project/src/ and list them"
+      },
+      "had_error": false,
+      "turn": 2,
+      "response_text": "Found: main.py, utils.py, config.py"
+    },
+    {
+      "tool": "Agent",
+      "input": {
+        "subagent_type": "general-purpose",
+        "description": "Check if the string 'import os' appears in /home/user/project/src/utils.py"
+      },
+      "had_error": false,
+      "turn": 3,
+      "response_text": "Yes, import os is on line 1"
+    },
+    {
+      "tool": "Agent",
+      "input": {
+        "subagent_type": "general-purpose",
+        "description": "List all .json files in /home/user/project/config/"
+      },
+      "had_error": false,
+      "turn": 4,
+      "response_text": "Found: settings.json, db.json"
+    },
+    {
+      "tool": "Agent",
+      "input": {
+        "subagent_type": "general-purpose",
+        "description": "Read /home/user/project/requirements.txt and list all packages"
+      },
+      "had_error": false,
+      "turn": 5,
+      "response_text": "flask==2.0.1, requests==2.28.0"
+    },
+    {
+      "tool": "Agent",
+      "input": {
+        "subagent_type": "general-purpose",
+        "description": "Find all TODO comments in /home/user/project/src/"
+      },
+      "had_error": false,
+      "turn": 6,
+      "response_text": "main.py:5: # TODO: implement error handling"
+    },
+    {
+      "tool": "Agent",
+      "input": {
+        "subagent_type": "general-purpose",
+        "description": "Tell me the line count of /home/user/project/src/main.py"
+      },
+      "had_error": false,
+      "turn": 7,
+      "response_text": "42 lines"
+    },
+    {
+      "tool": "Agent",
+      "input": {
+        "subagent_type": "general-purpose",
+        "description": "Check if /home/user/project/tests/ directory exists and what files are in it"
+      },
+      "had_error": false,
+      "turn": 8,
+      "response_text": "Directory exists: test_main.py, test_utils.py"
+    },
+    {
+      "tool": "Agent",
+      "input": {
+        "subagent_type": "general-purpose",
+        "description": "Read the first 10 lines of /home/user/project/src/config.py"
+      },
+      "had_error": false,
+      "turn": 9,
+      "response_text": "DEBUG=True\nHOST='localhost'\nPORT=5000"
+    },
+    {
+      "tool": "Agent",
+      "input": {
+        "subagent_type": "general-purpose",
+        "description": "Find which file imports 'from utils import parse'"
+      },
+      "had_error": false,
+      "turn": 10,
+      "response_text": "main.py imports from utils"
+    }
+  ]
+}

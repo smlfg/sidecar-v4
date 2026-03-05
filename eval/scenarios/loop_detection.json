@@ -1,0 +1,77 @@
+{
+  "name": "loop_detection",
+  "description": "5x identical Read of the same file should trigger LOOP detector",
+  "expected_detections": ["LOOP"],
+  "events": [
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/main.py"},
+      "had_error": false,
+      "turn": 1,
+      "response_text": "def main():\n    pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/main.py"},
+      "had_error": false,
+      "turn": 2,
+      "response_text": "def main():\n    pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/main.py"},
+      "had_error": false,
+      "turn": 3,
+      "response_text": "def main():\n    pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/main.py"},
+      "had_error": false,
+      "turn": 4,
+      "response_text": "def main():\n    pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/main.py"},
+      "had_error": false,
+      "turn": 5,
+      "response_text": "def main():\n    pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/utils.py"},
+      "had_error": false,
+      "turn": 6,
+      "response_text": "def helper(): pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/config.py"},
+      "had_error": false,
+      "turn": 7,
+      "response_text": "DEBUG = True"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/main.py"},
+      "had_error": false,
+      "turn": 8,
+      "response_text": "def main():\n    pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/main.py"},
+      "had_error": false,
+      "turn": 9,
+      "response_text": "def main():\n    pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/main.py"},
+      "had_error": false,
+      "turn": 10,
+      "response_text": "def main():\n    pass"
+    }
+  ]
+}

@@ -1,0 +1,124 @@
+{
+  "name": "good_workflow",
+  "description": "Clean read-grep-edit-test flow. No warnings should fire (false positive test).",
+  "expected_detections": [],
+  "events": [
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/config.yaml"},
+      "had_error": false,
+      "turn": 1,
+      "response_text": "database:\n  host: localhost"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/main.py"},
+      "had_error": false,
+      "turn": 2,
+      "response_text": "def main():\n    pass"
+    },
+    {
+      "tool": "Grep",
+      "input": {"pattern": "def process_data", "path": "/home/user/project/src/"},
+      "had_error": false,
+      "turn": 3,
+      "response_text": "/home/user/project/src/processor.py:12:def process_data(items):"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/processor.py"},
+      "had_error": false,
+      "turn": 4,
+      "response_text": "def process_data(items):\n    return [x for x in items]"
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/processor.py",
+        "old_string": "return [x for x in items]",
+        "new_string": "return [x.strip() for x in items if x]"
+      },
+      "had_error": false,
+      "turn": 5,
+      "response_text": ""
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/tests/test_processor.py"},
+      "had_error": false,
+      "turn": 6,
+      "response_text": "def test_process_data(): assert process_data(['a']) == ['a']"
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/tests/test_processor.py",
+        "old_string": "assert process_data(['a']) == ['a']",
+        "new_string": "assert process_data(['a ', ' b']) == ['a', 'b']"
+      },
+      "had_error": false,
+      "turn": 7,
+      "response_text": ""
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && python -m pytest tests/test_processor.py -v"},
+      "had_error": false,
+      "turn": 8,
+      "response_text": "PASSED tests/test_processor.py::test_process_data"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/main.py"},
+      "had_error": false,
+      "turn": 9,
+      "response_text": "def main():\n    pass"
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/main.py",
+        "old_string": "def main():\n    pass",
+        "new_string": "def main():\n    from processor import process_data\n    return process_data([])"
+      },
+      "had_error": false,
+      "turn": 10,
+      "response_text": ""
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && python -m pytest -v"},
+      "had_error": false,
+      "turn": 11,
+      "response_text": "2 passed in 0.12s"
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && git diff --stat"},
+      "had_error": false,
+      "turn": 12,
+      "response_text": "2 files changed, 4 insertions(+), 2 deletions(-)"
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && git add src/processor.py tests/test_processor.py"},
+      "had_error": false,
+      "turn": 13,
+      "response_text": ""
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && git commit -m 'fix: strip whitespace in process_data'"},
+      "had_error": false,
+      "turn": 14,
+      "response_text": "[main abc1234] fix: strip whitespace in process_data"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/processor.py"},
+      "had_error": false,
+      "turn": 15,
+      "response_text": "def process_data(items):\n    return [x.strip() for x in items if x]"
+    }
+  ]
+}

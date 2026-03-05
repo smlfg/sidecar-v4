@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sidecar Eval Dashboard</title>
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --card: #16213e;
+    --accent: #0f3460;
+    --highlight: #e94560;
+    --text: #e0e0e0;
+    --muted: #8892a4;
+    --border: #2a3a5e;
+    --yellow: #f0a500;
+    --green: #2ecc71;
+    --red: #e94560;
+    --mono: 'Courier New', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+  /* Header */
+  #header { background: var(--card); border-bottom: 1px solid var(--border); padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-shrink: 0; }
+  #header h1 { font-size: 18px; font-weight: 700; color: var(--highlight); white-space: nowrap; }
+  #header h1 span { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 8px; }
+  .load-btn { background: var(--accent); color: var(--text); border: 1px solid var(--border); padding: 7px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; white-space: nowrap; transition: background 0.2s; }
+  .load-btn:hover { background: var(--highlight); }
+  #file-input { display: none; }
+  #metrics-bar { display: flex; gap: 16px; flex: 1; flex-wrap: wrap; align-items: center; }
+  .metric-group { display: flex; flex-direction: column; gap: 2px; border-left: 2px solid var(--border); padding-left: 14px; }
+  .metric-group-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 2px; }
+  .metric-row { display: flex; gap: 12px; }
+  .metric-block { display: flex; flex-direction: column; align-items: center; min-width: 64px; }
+  .metric-block .label { font-size: 9px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+  .metric-block .val { font-size: 16px; font-weight: 700; font-family: var(--mono); }
+  .v1 { color: #4fc3f7; }
+  .v2 { color: #81c784; }
+  .v3 { color: #ffb74d; }
+
+  /* Layout */
+  #main { display: flex; flex: 1; overflow: hidden; }
+
+  /* Sidebar */
+  #sidebar { width: 240px; background: var(--card); border-right: 1px solid var(--border); overflow-y: auto; flex-shrink: 0; }
+  #sidebar-header { padding: 12px 16px; font-size: 11px; text-transform: uppercase; color: var(--muted); letter-spacing: 0.8px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  #scenario-count { font-size: 11px; color: var(--highlight); }
+  .scenario-item { padding: 10px 16px; cursor: pointer; border-left: 3px solid transparent; transition: all 0.15s; }
+  .scenario-item:hover { background: rgba(255,255,255,0.04); }
+  .scenario-item.active { background: rgba(15, 52, 96, 0.5); border-left-color: var(--highlight); }
+  .scenario-item .s-name { font-family: var(--mono); font-size: 12px; color: var(--text); }
+  .scenario-item .s-desc { font-size: 11px; color: var(--muted); margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .scenario-item .s-badges { display: flex; gap: 4px; margin-top: 5px; }
+  .badge { font-size: 10px; padding: 1px 6px; border-radius: 3px; background: var(--accent); font-family: var(--mono); }
+
+  /* Content area */
+  #content { flex: 1; overflow-y: auto; padding: 16px; }
+  #empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: var(--muted); gap: 8px; }
+  #empty-state .big { font-size: 48px; }
+  #empty-state p { font-size: 14px; }
+
+  /* Tabs */
+  #tabs { display: flex; gap: 0; border-bottom: 1px solid var(--border); margin-bottom: 16px; }
+  .tab { padding: 8px 16px; cursor: pointer; font-size: 13px; color: var(--muted); border-bottom: 2px solid transparent; transition: all 0.15s; }
+  .tab:hover { color: var(--text); }
+  .tab.active { color: var(--highlight); border-bottom-color: var(--highlight); }
+
+  /* Scenario header */
+  #scenario-header { margin-bottom: 16px; }
+  #scenario-header h2 { font-family: var(--mono); font-size: 16px; color: var(--text); }
+  #scenario-header p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .expected-chips { display: flex; gap: 6px; margin-top: 8px; }
+  .chip { padding: 2px 10px; border-radius: 12px; font-size: 11px; font-family: var(--mono); background: rgba(233, 69, 96, 0.2); color: var(--highlight); border: 1px solid rgba(233, 69, 96, 0.4); }
+
+  /* Version headers */
+  .version-grid { display: grid; grid-template-columns: 220px 1fr 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+  .ver-header { text-align: center; padding: 6px; font-size: 12px; font-weight: 700; font-family: var(--mono); border-radius: 4px; }
+  .ver-v1 { background: rgba(79, 195, 247, 0.1); color: #4fc3f7; border: 1px solid rgba(79, 195, 247, 0.3); }
+  .ver-v2 { background: rgba(129, 199, 132, 0.1); color: #81c784; border: 1px solid rgba(129, 199, 132, 0.3); }
+  .ver-v3 { background: rgba(255, 183, 77, 0.1); color: #ffb74d; border: 1px solid rgba(255, 183, 77, 0.3); }
+
+  /* Event rows */
+  .event-block { margin-bottom: 16px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .event-block:hover { border-color: rgba(233, 69, 96, 0.3); }
+  .event-row { display: grid; grid-template-columns: 220px 1fr 1fr 1fr; gap: 0; }
+  .event-info { background: var(--card); padding: 12px; border-right: 1px solid var(--border); }
+  .turn-badge { font-size: 10px; color: var(--muted); font-family: var(--mono); margin-bottom: 4px; }
+  .tool-name { font-family: var(--mono); font-size: 14px; font-weight: 700; color: var(--text); }
+  .input-summary { font-size: 11px; color: var(--muted); margin-top: 4px; word-break: break-all; line-height: 1.4; }
+  .expand-btn { font-size: 10px; color: var(--highlight); cursor: pointer; margin-top: 6px; display: inline-block; }
+  .expand-btn:hover { text-decoration: underline; }
+  .input-full { display: none; font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--mono); background: rgba(0,0,0,0.2); padding: 6px; border-radius: 4px; white-space: pre-wrap; word-break: break-all; }
+
+  /* Response cards */
+  .response-card { padding: 10px 12px; border-right: 1px solid var(--border); position: relative; }
+  .response-card:last-child { border-right: none; }
+  .response-card.has-findings { border-top: 2px solid var(--yellow); }
+  .response-card.empty-response { background: rgba(0,0,0,0.2); }
+  .response-card.gate-block { border-top: 2px solid var(--red); }
+  /* Rating-driven color overlay */
+  .response-card.rated-tp { border-top: 2px solid var(--green) !important; background: rgba(46,204,113,0.05); }
+  .response-card.rated-fp { border-top: 2px solid var(--red) !important; background: rgba(233,69,96,0.06); }
+  /* Rating type buttons */
+  .rate-type { display: flex; gap: 5px; margin-top: 6px; }
+  .rtype-btn { font-size: 10px; padding: 2px 8px; border-radius: 3px; border: 1px solid var(--border); cursor: pointer; background: transparent; color: var(--muted); transition: all 0.15s; }
+  .rtype-btn:hover { border-color: var(--text); color: var(--text); }
+  .rtype-btn.tp { border-color: var(--green); color: var(--green); background: rgba(46,204,113,0.1); }
+  .rtype-btn.fp { border-color: var(--red); color: var(--red); background: rgba(233,69,96,0.1); }
+
+  .findings-list { margin-bottom: 6px; }
+  .finding-tag { font-family: var(--mono); font-size: 11px; background: rgba(240, 165, 0, 0.15); color: var(--yellow); border: 1px solid rgba(240, 165, 0, 0.3); padding: 2px 8px; border-radius: 3px; margin-bottom: 3px; display: block; word-break: break-word; }
+  .no-findings { font-size: 11px; color: rgba(255,255,255,0.2); font-style: italic; }
+  .response-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 6px; }
+  .meta-item { font-size: 10px; font-family: var(--mono); }
+  .meta-item.score { color: var(--highlight); }
+  .meta-item.latency { color: var(--muted); }
+  .meta-item.judge { color: #ce93d8; font-style: italic; }
+  .extra-fields { margin-top: 6px; }
+  .extra-field { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  .extra-field span { color: var(--text); }
+
+  /* Rating panel */
+  .rating-panel { background: rgba(0,0,0,0.15); border-top: 1px solid var(--border); padding: 10px; display: grid; grid-template-columns: 220px 1fr 1fr 1fr; gap: 0; }
+  .rating-label { padding: 8px 12px; font-size: 11px; color: var(--muted); display: flex; align-items: center; }
+  .rating-cell { padding: 8px 12px; border-right: 1px solid var(--border); }
+  .rating-cell:last-child { border-right: none; }
+  .stars { display: flex; gap: 3px; margin-bottom: 5px; }
+  .star { font-size: 16px; cursor: pointer; color: var(--border); transition: color 0.1s; user-select: none; }
+  .star.active { color: var(--yellow); }
+  .star:hover { color: var(--yellow); }
+  .rating-note { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 4px; color: var(--text); padding: 4px 8px; font-size: 11px; resize: vertical; min-height: 40px; font-family: inherit; }
+  .rating-note:focus { outline: none; border-color: var(--accent); }
+
+  /* Summary view */
+  #summary-view { display: none; }
+  .summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-bottom: 24px; }
+  .summary-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .summary-card h3 { font-family: var(--mono); font-size: 14px; margin-bottom: 12px; }
+  .stat-row { display: flex; justify-content: space-between; padding: 4px 0; border-bottom: 1px solid rgba(255,255,255,0.04); font-size: 12px; }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-val { font-family: var(--mono); font-weight: 700; }
+  .detection-matrix { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .detection-matrix h3 { margin-bottom: 12px; font-size: 14px; }
+  .matrix-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .matrix-table th { text-align: left; padding: 6px 10px; background: var(--accent); font-family: var(--mono); }
+  .matrix-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); font-family: var(--mono); }
+  .matrix-table tr:hover td { background: rgba(255,255,255,0.03); }
+  .check { color: var(--green); }
+  .cross { color: rgba(255,255,255,0.2); }
+
+  /* Export bar */
+  #export-bar { padding: 12px 16px; border-top: 1px solid var(--border); background: var(--card); display: flex; gap: 10px; align-items: center; flex-shrink: 0; }
+  #export-bar span { font-size: 12px; color: var(--muted); }
+  .export-btn { background: var(--accent); color: var(--text); border: 1px solid var(--border); padding: 6px 14px; border-radius: 5px; cursor: pointer; font-size: 12px; transition: background 0.2s; }
+  .export-btn:hover { background: var(--highlight); }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<div id="header">
+  <h1>Sidecar Eval Dashboard <span>v1 / v2 / v3 comparison</span></h1>
+  <button class="load-btn" onclick="document.getElementById('file-input').click()">+ Load Results</button>
+  <input type="file" id="file-input" multiple accept=".json">
+  <div id="metrics-bar">
+    <div class="metric-block"><div class="label">Scenarios</div><div class="val" id="m-scenarios">0</div></div>
+    <div class="metric-group">
+      <div class="metric-group-label">True Positive Rate</div>
+      <div class="metric-row">
+        <div class="metric-block"><div class="label">v1</div><div class="val v1" id="m-v1-tp">—</div></div>
+        <div class="metric-block"><div class="label">v2</div><div class="val v2" id="m-v2-tp">—</div></div>
+        <div class="metric-block"><div class="label">v3</div><div class="val v3" id="m-v3-tp">—</div></div>
+      </div>
+    </div>
+    <div class="metric-group">
+      <div class="metric-group-label">False Positive Rate</div>
+      <div class="metric-row">
+        <div class="metric-block"><div class="label">v1</div><div class="val v1" id="m-v1-fp">—</div></div>
+        <div class="metric-block"><div class="label">v2</div><div class="val v2" id="m-v2-fp">—</div></div>
+        <div class="metric-block"><div class="label">v3</div><div class="val v3" id="m-v3-fp">—</div></div>
+      </div>
+    </div>
+    <div class="metric-group">
+      <div class="metric-group-label">Avg Latency (ms)</div>
+      <div class="metric-row">
+        <div class="metric-block"><div class="label">v1</div><div class="val v1" id="m-v1-lat">—</div></div>
+        <div class="metric-block"><div class="label">v2</div><div class="val v2" id="m-v2-lat">—</div></div>
+        <div class="metric-block"><div class="label">v3</div><div class="val v3" id="m-v3-lat">—</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="main">
+  <div id="sidebar">
+    <div id="sidebar-header">Scenarios <span id="scenario-count">0</span></div>
+    <div id="scenario-list"></div>
+  </div>
+
+  <div id="content">
+    <div id="empty-state">
+      <div class="big">📊</div>
+      <p>Load JSON result files to get started</p>
+      <p style="font-size:12px; color: var(--muted)">Use the "+ Load Results" button above</p>
+    </div>
+
+    <div id="scenario-view" style="display:none">
+      <div id="tabs">
+        <div class="tab active" onclick="switchTab('events')">Events</div>
+        <div class="tab" onclick="switchTab('summary')">Summary</div>
+      </div>
+
+      <div id="events-view">
+        <div id="scenario-header"></div>
+        <div class="version-grid">
+          <div></div>
+          <div class="ver-header ver-v1">v1</div>
+          <div class="ver-header ver-v2">v2</div>
+          <div class="ver-header ver-v3">v3</div>
+        </div>
+        <div id="events-list"></div>
+      </div>
+
+      <div id="summary-view">
+        <div class="summary-grid" id="summary-cards"></div>
+        <div class="detection-matrix" id="detection-matrix"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="export-bar">
+  <span id="export-status">No data loaded</span>
+  <button class="export-btn" onclick="exportRatings()">Export Ratings</button>
+  <button class="export-btn" onclick="exportAllRatings()">Export All Ratings</button>
+</div>
+
+<script>
+const state = {
+  scenarios: {},       // key: scenario name, val: result JSON
+  ratings: {},         // key: `${scenario}__${eventIdx}__${version}`, val: {stars, note}
+  activeScenario: null,
+  activeTab: 'events'
+};
+
+// File loading
+document.getElementById('file-input').addEventListener('change', (e) => {
+  const files = Array.from(e.target.files);
+  let loaded = 0;
+  files.forEach(f => {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const data = JSON.parse(ev.target.result);
+        const key = data.scenario || f.name.replace('.json','');
+        state.scenarios[key] = data;
+        // Merge existing ratings
+        if (data.ratings) {
+          Object.assign(state.ratings, data.ratings);
+        }
+        loaded++;
+        if (loaded === files.length) {
+          renderSidebar();
+          updateMetrics();
+          if (!state.activeScenario && Object.keys(state.scenarios).length > 0) {
+            selectScenario(Object.keys(state.scenarios)[0]);
+          }
+        }
+      } catch(err) {
+        alert('Error parsing ' + f.name + ': ' + err.message);
+      }
+    };
+    reader.readAsText(f);
+  });
+  e.target.value = '';
+});
+
+function renderSidebar() {
+  const list = document.getElementById('scenario-list');
+  const keys = Object.keys(state.scenarios);
+  document.getElementById('scenario-count').textContent = keys.length;
+  list.innerHTML = keys.map(k => {
+    const s = state.scenarios[k];
+    const expected = (s.expected_detections || []);
+    const badgesHtml = expected.map(d => `<span class="badge">${d}</span>`).join('');
+    const active = k === state.activeScenario ? 'active' : '';
+    return `<div class="scenario-item ${active}" onclick="selectScenario('${escHtml(k)}')">
+      <div class="s-name">${escHtml(k)}</div>
+      <div class="s-desc">${escHtml(s.description || '')}</div>
+      <div class="s-badges">${badgesHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function selectScenario(key) {
+  state.activeScenario = key;
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('scenario-view').style.display = 'block';
+  renderSidebar();
+  renderScenario();
+  updateExportStatus();
+}
+
+function switchTab(tab) {
+  state.activeTab = tab;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab')[tab === 'events' ? 0 : 1].classList.add('active');
+  document.getElementById('events-view').style.display = tab === 'events' ? 'block' : 'none';
+  document.getElementById('summary-view').style.display = tab === 'summary' ? 'block' : 'none';
+  if (tab === 'summary') renderSummary();
+}
+
+function renderScenario() {
+  const s = state.scenarios[state.activeScenario];
+  if (!s) return;
+
+  // Header
+  const expected = (s.expected_detections || []).map(d => `<span class="chip">${escHtml(d)}</span>`).join('');
+  document.getElementById('scenario-header').innerHTML = `
+    <h2>${escHtml(s.scenario || state.activeScenario)}</h2>
+    <p>${escHtml(s.description || '')}</p>
+    <div class="expected-chips">${expected ? '<span style="font-size:11px;color:var(--muted);margin-right:4px">Expected:</span>' + expected : ''}</div>
+  `;
+
+  // Events
+  const events = s.events || [];
+  const html = events.map((ev, idx) => renderEvent(ev, idx)).join('');
+  document.getElementById('events-list').innerHTML = html || '<div style="color:var(--muted);padding:20px">No events</div>';
+}
+
+function renderEvent(ev, idx) {
+  const responses = ev.responses || {};
+  const versions = ['v1','v2','v3'];
+
+  const infoHtml = renderEventInfo(ev, idx);
+  const cardsHtml = versions.map(v => renderResponseCard(responses[v], v, idx)).join('');
+  const ratingHtml = renderRatingPanel(idx);
+
+  return `<div class="event-block" id="event-${idx}">
+    <div class="event-row">
+      ${infoHtml}
+      ${cardsHtml}
+    </div>
+    ${ratingHtml}
+  </div>`;
+}
+
+function renderEventInfo(ev, idx) {
+  const inputStr = JSON.stringify(ev.input || {}, null, 2);
+  const summary = summarizeInput(ev.input || {});
+  return `<div class="event-info">
+    <div class="turn-badge">Turn #${(ev.index !== undefined ? ev.index : idx) + 1}</div>
+    <div class="tool-name">${escHtml(ev.tool || 'unknown')}</div>
+    <div class="input-summary">${escHtml(summary)}</div>
+    <span class="expand-btn" onclick="toggleExpand(this)">show input ▾</span>
+    <pre class="input-full">${escHtml(inputStr)}</pre>
+  </div>`;
+}
+
+function renderResponseCard(resp, version, eventIdx) {
+  const ratingKey = `${state.activeScenario}__${eventIdx}__${version}`;
+  const rating = state.ratings[ratingKey] || {};
+
+  if (!resp) {
+    return `<div class="response-card empty-response" id="card-${eventIdx}-${version}"><div class="no-findings">no response</div></div>`;
+  }
+
+  const r = resp.response || {};
+  const findings = r.findings || [];
+  const score = r.concern_score;
+  const latency = resp.latency_ms;
+  const judgeComment = r.judge_comment;
+  const context = r.context;
+
+  const hasFindings = findings.length > 0;
+  const isGate = r.action === 'block' || r.blocked === true;
+
+  // Rating-driven color takes precedence over auto-detection
+  let cls = '';
+  if (rating.type === 'tp') cls = 'rated-tp';
+  else if (rating.type === 'fp') cls = 'rated-fp';
+  else if (isGate) cls = 'gate-block';
+  else if (hasFindings) cls = 'has-findings';
+
+  const findingsHtml = hasFindings
+    ? findings.map(f => `<span class="finding-tag">${escHtml(String(f))}</span>`).join('')
+    : `<span class="no-findings">no findings</span>`;
+
+  const metaHtml = [
+    score !== undefined ? `<span class="meta-item score">score: ${score}</span>` : '',
+    latency !== undefined ? `<span class="meta-item latency">${latency.toFixed(1)}ms</span>` : '',
+    judgeComment ? `<span class="meta-item judge" title="${escHtml(judgeComment)}">judge: ${escHtml(judgeComment.substring(0,40))}${judgeComment.length > 40 ? '…' : ''}</span>` : '',
+  ].filter(Boolean).join('');
+
+  const extraHtml = context ? `<div class="extra-fields"><div class="extra-field">ctx: <span>${escHtml(context.substring(0,60))}${context.length > 60 ? '…' : ''}</span></div></div>` : '';
+
+  const tpActive = rating.type === 'tp' ? 'tp' : '';
+  const fpActive = rating.type === 'fp' ? 'fp' : '';
+  const rkey = escAttr(ratingKey);
+  const rateTypeHtml = hasFindings ? `<div class="rate-type">
+    <button class="rtype-btn ${tpActive}" onclick="setRatingType('${rkey}','tp')">✓ helpful</button>
+    <button class="rtype-btn ${fpActive}" onclick="setRatingType('${rkey}','fp')">✗ false pos</button>
+  </div>` : '';
+
+  return `<div class="response-card ${cls}" id="card-${eventIdx}-${version}">
+    <div class="findings-list">${findingsHtml}</div>
+    ${rateTypeHtml}
+    <div class="response-meta">${metaHtml}</div>
+    ${extraHtml}
+  </div>`;
+}
+
+function renderRatingPanel(eventIdx) {
+  const versions = ['v1','v2','v3'];
+  const cells = versions.map(v => {
+    const key = `${state.activeScenario}__${eventIdx}__${v}`;
+    const r = state.ratings[key] || {stars: 0, note: ''};
+    const stars = [1,2,3,4,5].map(n => {
+      const active = n <= r.stars ? 'active' : '';
+      return `<span class="star ${active}" onclick="setRating('${escAttr(key)}',${n})" data-rating-key="${escAttr(key)}" data-n="${n}">★</span>`;
+    }).join('');
+    return `<div class="rating-cell">
+      <div class="stars">${stars}</div>
+      <textarea class="rating-note" placeholder="Notes…" oninput="setNote('${escAttr(key)}', this.value)">${escHtml(r.note || '')}</textarea>
+    </div>`;
+  }).join('');
+
+  return `<div class="rating-panel">
+    <div class="rating-label">Rate this event</div>
+    ${cells}
+  </div>`;
+}
+
+function setRating(key, n) {
+  if (!state.ratings[key]) state.ratings[key] = {stars: 0, note: ''};
+  state.ratings[key].stars = n;
+  // Update star display
+  document.querySelectorAll(`[data-rating-key="${key}"]`).forEach(s => {
+    s.classList.toggle('active', parseInt(s.dataset.n) <= n);
+  });
+  updateExportStatus();
+}
+
+function setNote(key, val) {
+  if (!state.ratings[key]) state.ratings[key] = {stars: 0, note: ''};
+  state.ratings[key].note = val;
+  updateExportStatus();
+}
+
+function setRatingType(key, type) {
+  if (!state.ratings[key]) state.ratings[key] = {stars: 0, note: ''};
+  // Toggle: clicking same type again clears it
+  state.ratings[key].type = state.ratings[key].type === type ? null : type;
+  // Re-render the event so card color and button state update
+  if (state.activeScenario) renderScenario();
+  updateMetrics();
+  updateExportStatus();
+}
+
+function renderSummary() {
+  const allScenarios = Object.values(state.scenarios);
+  const versions = ['v1','v2','v3'];
+  const colors = {v1: '#4fc3f7', v2: '#81c784', v3: '#ffb74d'};
+
+  // Per-version stats
+  const stats = {};
+  versions.forEach(v => {
+    stats[v] = {findings: 0, tp: 0, fp: 0, rated: 0, latencies: [], detectors: new Set()};
+  });
+
+  allScenarios.forEach(s => {
+    const sKey = s.scenario || Object.keys(state.scenarios).find(k => state.scenarios[k] === s) || '';
+    (s.events || []).forEach((ev, idx) => {
+      versions.forEach(v => {
+        const resp = (ev.responses || {})[v];
+        if (!resp) return;
+        const r = resp.response || {};
+        const findings = r.findings || [];
+        stats[v].findings += findings.length;
+        if (resp.latency_ms !== undefined) stats[v].latencies.push(resp.latency_ms);
+        findings.forEach(f => {
+          const match = String(f).match(/^([A-Z_-]+)/);
+          if (match) stats[v].detectors.add(match[1]);
+        });
+        const rating = state.ratings[`${sKey}__${idx}__${v}`];
+        if (rating?.type === 'tp') { stats[v].tp++; stats[v].rated++; }
+        else if (rating?.type === 'fp') { stats[v].fp++; stats[v].rated++; }
+      });
+    });
+  });
+
+  const cardsHtml = versions.map(v => {
+    const st = stats[v];
+    const avgLat = st.latencies.length ? (st.latencies.reduce((a,b)=>a+b,0)/st.latencies.length).toFixed(1) : '—';
+    const tpRate = st.rated > 0 ? Math.round(st.tp/st.rated*100)+'%' : '—';
+    const fpRate = st.rated > 0 ? Math.round(st.fp/st.rated*100)+'%' : '—';
+    return `<div class="summary-card">
+      <h3 style="color:${colors[v]}">${v}</h3>
+      <div class="stat-row"><span>Total Findings</span><span class="stat-val">${st.findings}</span></div>
+      <div class="stat-row"><span>True Positive Rate</span><span class="stat-val" style="color:var(--green)">${tpRate}</span></div>
+      <div class="stat-row"><span>False Positive Rate</span><span class="stat-val" style="color:var(--red)">${fpRate}</span></div>
+      <div class="stat-row"><span>Avg Latency</span><span class="stat-val">${avgLat}ms</span></div>
+      <div class="stat-row"><span>Unique Detectors</span><span class="stat-val">${st.detectors.size}</span></div>
+      <div class="stat-row"><span>Detectors</span><span class="stat-val" style="font-size:10px">${[...st.detectors].join(', ') || '—'}</span></div>
+    </div>`;
+  }).join('');
+
+  // Detection matrix
+  const allDetectors = new Set();
+  versions.forEach(v => stats[v].detectors.forEach(d => allDetectors.add(d)));
+  const detectorRows = [...allDetectors].sort().map(d => {
+    const cells = versions.map(v => {
+      const has = stats[v].detectors.has(d);
+      return `<td class="${has ? 'check' : 'cross'}">${has ? '✓' : '·'}</td>`;
+    }).join('');
+    return `<tr><td>${escHtml(d)}</td>${cells}</tr>`;
+  }).join('');
+
+  document.getElementById('summary-cards').innerHTML = cardsHtml;
+  document.getElementById('detection-matrix').innerHTML = `
+    <h3>Detection Matrix</h3>
+    <table class="matrix-table">
+      <thead><tr><th>Detector</th><th style="color:#4fc3f7">v1</th><th style="color:#81c784">v2</th><th style="color:#ffb74d">v3</th></tr></thead>
+      <tbody>${detectorRows || '<tr><td colspan="4" style="color:var(--muted)">No detectors fired</td></tr>'}</tbody>
+    </table>
+  `;
+}
+
+function updateMetrics() {
+  const allScenarios = Object.values(state.scenarios);
+  document.getElementById('m-scenarios').textContent = allScenarios.length;
+
+  const versions = ['v1','v2','v3'];
+
+  versions.forEach(v => {
+    let tp = 0, fp = 0, rated = 0, lats = [];
+    allScenarios.forEach(s => {
+      (s.events || []).forEach((ev, idx) => {
+        const resp = (ev.responses || {})[v];
+        if (!resp) return;
+        if (resp.latency_ms !== undefined) lats.push(resp.latency_ms);
+        // Count ratings across all scenarios
+        const ratingKey = `${s.scenario || s.scenario_id || Object.keys(state.scenarios).find(k => state.scenarios[k] === s)}__${idx}__${v}`;
+        const rating = state.ratings[ratingKey];
+        if (rating?.type === 'tp') { tp++; rated++; }
+        else if (rating?.type === 'fp') { fp++; rated++; }
+      });
+    });
+    const tpRate = rated > 0 ? Math.round(tp / rated * 100) + '%' : '—';
+    const fpRate = rated > 0 ? Math.round(fp / rated * 100) + '%' : '—';
+    const avg = lats.length ? lats.reduce((a,b)=>a+b,0)/lats.length : null;
+    const avgStr = avg !== null ? (avg < 10 ? avg.toFixed(1) : Math.round(avg).toString()) : '—';
+
+    document.getElementById(`m-${v}-tp`).textContent = tpRate;
+    document.getElementById(`m-${v}-fp`).textContent = fpRate;
+    document.getElementById(`m-${v}-lat`).textContent = avgStr === '—' ? '—' : avgStr;
+  });
+}
+
+function updateExportStatus() {
+  const ratingCount = Object.keys(state.ratings).filter(k => state.ratings[k].stars > 0).length;
+  document.getElementById('export-status').textContent =
+    `${ratingCount} rating(s) saved | ${Object.keys(state.scenarios).length} scenario(s) loaded`;
+}
+
+function exportRatings() {
+  if (!state.activeScenario) { alert('No scenario selected'); return; }
+  const s = JSON.parse(JSON.stringify(state.scenarios[state.activeScenario]));
+  s.ratings = {};
+  Object.keys(state.ratings).forEach(k => {
+    if (k.startsWith(state.activeScenario + '__')) {
+      s.ratings[k] = state.ratings[k];
+    }
+  });
+  downloadJSON(s, state.activeScenario + '_rated.json');
+}
+
+function exportAllRatings() {
+  if (Object.keys(state.scenarios).length === 0) { alert('No data loaded'); return; }
+  const out = {};
+  Object.keys(state.scenarios).forEach(key => {
+    const s = JSON.parse(JSON.stringify(state.scenarios[key]));
+    s.ratings = {};
+    Object.keys(state.ratings).forEach(rk => {
+      if (rk.startsWith(key + '__')) s.ratings[rk] = state.ratings[rk];
+    });
+    out[key] = s;
+  });
+  downloadJSON(out, 'sidecar_eval_ratings.json');
+}
+
+function downloadJSON(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+function toggleExpand(btn) {
+  const pre = btn.nextElementSibling;
+  const expanded = pre.style.display === 'block';
+  pre.style.display = expanded ? 'none' : 'block';
+  btn.textContent = expanded ? 'show input ▾' : 'hide input ▴';
+}
+
+function summarizeInput(input) {
+  if (!input) return '';
+  const keys = Object.keys(input);
+  if (keys.length === 0) return '{}';
+  const first = input[keys[0]];
+  const val = typeof first === 'string' ? first : JSON.stringify(first);
+  return `${keys[0]}: ${val.substring(0, 60)}${val.length > 60 ? '…' : ''}`;
+}
+
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escAttr(s) {
+  return String(s).replace(/'/g,"\\'");
+}
+</script>
+</body>
+</html>

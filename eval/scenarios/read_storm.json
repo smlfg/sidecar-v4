@@ -1,0 +1,91 @@
+{
+  "name": "read_storm",
+  "description": "8x Read of different files without any Write/Edit. Should trigger READ-STORM.",
+  "expected_detections": ["READ-STORM"],
+  "events": [
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/main.py"},
+      "had_error": false,
+      "turn": 1,
+      "response_text": "def main(): pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/utils.py"},
+      "had_error": false,
+      "turn": 2,
+      "response_text": "def helper(): pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/config.py"},
+      "had_error": false,
+      "turn": 3,
+      "response_text": "DEBUG = True"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/models.py"},
+      "had_error": false,
+      "turn": 4,
+      "response_text": "class User: pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/views.py"},
+      "had_error": false,
+      "turn": 5,
+      "response_text": "def index(): pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/serializers.py"},
+      "had_error": false,
+      "turn": 6,
+      "response_text": "class UserSerializer: pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/urls.py"},
+      "had_error": false,
+      "turn": 7,
+      "response_text": "urlpatterns = []"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/admin.py"},
+      "had_error": false,
+      "turn": 8,
+      "response_text": "from django.contrib import admin"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/apps.py"},
+      "had_error": false,
+      "turn": 9,
+      "response_text": "class AppConfig: pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/signals.py"},
+      "had_error": false,
+      "turn": 10,
+      "response_text": "from django.dispatch import receiver"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/middleware.py"},
+      "had_error": false,
+      "turn": 11,
+      "response_text": "class AuthMiddleware: pass"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/exceptions.py"},
+      "had_error": false,
+      "turn": 12,
+      "response_text": "class ApiError(Exception): pass"
+    }
+  ]
+}

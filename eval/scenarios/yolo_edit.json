@@ -1,0 +1,87 @@
+{
+  "name": "yolo_edit",
+  "description": "Write to files without ever Reading them first. Should trigger YOLO detector.",
+  "expected_detections": ["YOLO"],
+  "events": [
+    {
+      "tool": "Bash",
+      "input": {"command": "ls /home/user/project/src/"},
+      "had_error": false,
+      "turn": 1,
+      "response_text": "main.py  utils.py  config.py"
+    },
+    {
+      "tool": "Write",
+      "input": {
+        "file_path": "/home/user/project/src/main.py",
+        "content": "def main():\n    print('Hello World')\n\nif __name__ == '__main__':\n    main()\n"
+      },
+      "had_error": false,
+      "turn": 2,
+      "response_text": ""
+    },
+    {
+      "tool": "Write",
+      "input": {
+        "file_path": "/home/user/project/src/utils.py",
+        "content": "def format_output(text):\n    return text.upper()\n"
+      },
+      "had_error": false,
+      "turn": 3,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/config.py",
+        "old_string": "DEBUG = False",
+        "new_string": "DEBUG = True"
+      },
+      "had_error": false,
+      "turn": 4,
+      "response_text": ""
+    },
+    {
+      "tool": "Write",
+      "input": {
+        "file_path": "/home/user/project/src/db.py",
+        "content": "import sqlite3\n\ndef get_connection():\n    return sqlite3.connect('app.db')\n"
+      },
+      "had_error": false,
+      "turn": 5,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/main.py",
+        "old_string": "print('Hello World')",
+        "new_string": "from db import get_connection\nprint(get_connection())"
+      },
+      "had_error": false,
+      "turn": 6,
+      "response_text": ""
+    },
+    {
+      "tool": "Write",
+      "input": {
+        "file_path": "/home/user/project/src/api.py",
+        "content": "from flask import Flask\napp = Flask(__name__)\n\n@app.route('/')\ndef index():\n    return 'OK'\n"
+      },
+      "had_error": false,
+      "turn": 7,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/api.py",
+        "old_string": "return 'OK'",
+        "new_string": "return {'status': 'ok'}"
+      },
+      "had_error": false,
+      "turn": 8,
+      "response_text": ""
+    }
+  ]
+}

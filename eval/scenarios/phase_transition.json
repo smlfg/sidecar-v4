@@ -1,0 +1,166 @@
+{
+  "name": "phase_transition",
+  "description": "Full session: exploration → implementation → testing. Tests phase tracker transitions.",
+  "expected_detections": [],
+  "events": [
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/README.md"},
+      "had_error": false,
+      "turn": 1,
+      "response_text": "# MyProject\nA Python web app."
+    },
+    {
+      "tool": "Glob",
+      "input": {"pattern": "/home/user/project/src/**/*.py"},
+      "had_error": false,
+      "turn": 2,
+      "response_text": "/home/user/project/src/main.py\n/home/user/project/src/utils.py"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/main.py"},
+      "had_error": false,
+      "turn": 3,
+      "response_text": "def main(): pass"
+    },
+    {
+      "tool": "Grep",
+      "input": {"pattern": "def ", "path": "/home/user/project/src/"},
+      "had_error": false,
+      "turn": 4,
+      "response_text": "main.py:1:def main():"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/src/utils.py"},
+      "had_error": false,
+      "turn": 5,
+      "response_text": "def parse(data): return data"
+    },
+    {
+      "tool": "Glob",
+      "input": {"pattern": "/home/user/project/tests/**/*.py"},
+      "had_error": false,
+      "turn": 6,
+      "response_text": "/home/user/project/tests/test_main.py"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/tests/test_main.py"},
+      "had_error": false,
+      "turn": 7,
+      "response_text": "def test_main(): assert main() is None"
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/utils.py",
+        "old_string": "def parse(data): return data",
+        "new_string": "def parse(data):\n    if isinstance(data, str):\n        return data.strip()\n    return data"
+      },
+      "had_error": false,
+      "turn": 8,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/main.py",
+        "old_string": "def main(): pass",
+        "new_string": "from utils import parse\n\ndef main(data=None):\n    return parse(data) if data else None"
+      },
+      "had_error": false,
+      "turn": 9,
+      "response_text": ""
+    },
+    {
+      "tool": "Write",
+      "input": {
+        "file_path": "/home/user/project/src/processor.py",
+        "content": "from utils import parse\n\ndef process(items):\n    return [parse(i) for i in items]\n"
+      },
+      "had_error": false,
+      "turn": 10,
+      "response_text": ""
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/src/main.py",
+        "old_string": "return parse(data) if data else None",
+        "new_string": "from processor import process\n    return process([data]) if data else []"
+      },
+      "had_error": false,
+      "turn": 11,
+      "response_text": ""
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && python -m pytest tests/ -v 2>&1 | head -20"},
+      "had_error": false,
+      "turn": 12,
+      "response_text": "FAILED tests/test_main.py::test_main - AssertionError"
+    },
+    {
+      "tool": "Read",
+      "input": {"file_path": "/home/user/project/tests/test_main.py"},
+      "had_error": false,
+      "turn": 13,
+      "response_text": "def test_main(): assert main() is None"
+    },
+    {
+      "tool": "Edit",
+      "input": {
+        "file_path": "/home/user/project/tests/test_main.py",
+        "old_string": "def test_main(): assert main() is None",
+        "new_string": "from main import main\n\ndef test_main_no_args():\n    assert main() == []\n\ndef test_main_with_data():\n    assert main('hello') == ['hello']"
+      },
+      "had_error": false,
+      "turn": 14,
+      "response_text": ""
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && python -m pytest tests/ -v"},
+      "had_error": false,
+      "turn": 15,
+      "response_text": "2 passed in 0.08s"
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && python -m pytest tests/ --cov=src/ --cov-report=term"},
+      "had_error": false,
+      "turn": 16,
+      "response_text": "Coverage: 87%"
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && python -m flake8 src/"},
+      "had_error": false,
+      "turn": 17,
+      "response_text": ""
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && git status"},
+      "had_error": false,
+      "turn": 18,
+      "response_text": "modified: src/main.py\nmodified: src/utils.py\nnew file: src/processor.py"
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && git add -p"},
+      "had_error": false,
+      "turn": 19,
+      "response_text": ""
+    },
+    {
+      "tool": "Bash",
+      "input": {"command": "cd /home/user/project && git commit -m 'feat: add parse and process pipeline'"},
+      "had_error": false,
+      "turn": 20,
+      "response_text": "[main def9876] feat: add parse and process pipeline"
+    }
+  ]
+}
