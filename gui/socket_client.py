@@ -101,5 +101,13 @@ def send_command(cmd_data: dict, callback, error_callback=None) -> None:
 
 
 def is_daemon_reachable() -> bool:
-    """Synchronous check if the socket file exists."""
-    return Path(SOCKET_PATH).exists()
+    """Check if the daemon is reachable via Unix socket."""
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.settimeout(0.5)
+    try:
+        sock.connect(SOCKET_PATH)
+        return True
+    except OSError:
+        return False
+    finally:
+        sock.close()

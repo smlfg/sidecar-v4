@@ -60,6 +60,9 @@ class PhaseTracker:
         self.phase_history: list[tuple[str, float]] = [(EXPLORATION, time.time())]
         self.tool_window: list[str] = []  # Last N tools
         self.window_size = 10
+        # v2.0: Multi-turn analysis
+        self.event_history: list[dict] = []  # Last 20 events
+        self.prompt_history: list[str] = []  # Last 10 prompts (lowercased)
 
     def update_from_prompt(self, prompt: str) -> str:
         """Update phase based on prompt keywords. Returns current phase."""
@@ -113,6 +116,87 @@ class PhaseTracker:
 
         return self.current_phase
 
+    def record_event(self, event: dict) -> None:
+        """Record an event for multi-turn analysis.
+
+        Event format: {"type": "tool_use"|"prompt"|"error", "tool": "Read",
+                        "content": "...", "ts": time.time(), "had_error": False}
+        """
+        event.setdefault("ts", time.time())
+        self.event_history.append(event)
+        if len(self.event_history) > 20:
+            self.event_history = self.event_history[-20:]
+        # Track prompts separately
+        if event.get("type") == "prompt" and event.get("content"):
+            self.prompt_history.append(event["content"].lower())
+            if len(self.prompt_history) > 10:
+                self.prompt_history = self.prompt_history[-10:]
+
+    def analyze_patterns(self) -> list[str]:
+        """Detect multi-turn patterns from event history. Returns warning strings."""
+        warnings = []
+
+        # 1. Repetitive prompts (2+ of last 5 with >60% word overlap)
+        if len(self.prompt_history) >= 2:
+            recent = self.prompt_history[-5:]
+            for i in range(len(recent)):
+                for j in range(i + 1, len(recent)):
+                    if self._word_overlap(recent[i], recent[j]) > 0.6:
+                        warnings.append(
+                            "REPETITION: Aehnliche Frage wiederholt. Anderen Ansatz waehlen."
+                        )
+                        break
+                if warnings:
+                    break
+
+        # 2. Read storm: 5+ consecutive reads without edit/write
+        read_tools = {"Read", "Glob", "Grep"}
+        write_tools = {"Edit", "Write"}
+        consecutive_reads = 0
+        for ev in reversed(self.event_history):
+            if ev.get("tool") in read_tools:
+                consecutive_reads += 1
+            elif ev.get("tool") in write_tools or ev.get("type") == "prompt":
+                break
+            else:
+                consecutive_reads += 1  # non-read, non-write tools count as stall
+        if consecutive_reads >= 5:
+            warnings.append(
+                f"STALL: {consecutive_reads} Lese-Ops ohne Aktion. Plan machen oder /explore-first."
+            )
+
+        # 3. Error loop: 3+ errors in last 5 events
+        recent_5 = self.event_history[-5:]
+        error_count = sum(1 for ev in recent_5 if ev.get("had_error"))
+        if error_count >= 3:
+            warnings.append(
+                f"ERROR-LOOP: {error_count} Fehler in Folge. /debug-loop oder Strategie aendern."
+            )
+
+        # 4. Long session without checkpoint: 20+ events without git
+        if len(self.event_history) >= 20:
+            has_git = any(
+                "git" in ev.get("content", "").lower()
+                or "git" in ev.get("tool", "").lower()
+                for ev in self.event_history
+            )
+            if not has_git:
+                warnings.append(
+                    f"CHECKPOINT: {len(self.event_history)} Calls ohne Commit. Fortschritt sichern."
+                )
+
+        return warnings
+
+    @staticmethod
+    def _word_overlap(a: str, b: str) -> float:
+        """Return ratio of shared words between two strings (0.0 to 1.0)."""
+        words_a = set(a.split())
+        words_b = set(b.split())
+        if not words_a or not words_b:
+            return 0.0
+        intersection = words_a & words_b
+        return len(intersection) / min(len(words_a), len(words_b))
+
     def _transition(self, new_phase: str, reason: str) -> None:
         old = self.current_phase
         self.current_phase = new_phase
@@ -128,6 +212,8 @@ class PhaseTracker:
             "current_phase": self.current_phase,
             "tool_window": self.tool_window,
             "phase_history": [(p, t) for p, t in self.phase_history[-10:]],
+            "event_history": self.event_history[-20:],
+            "prompt_history": self.prompt_history[-10:],
         }
 
     @classmethod
@@ -140,4 +226,6 @@ class PhaseTracker:
             history = data.get("phase_history", [])
             if history:
                 tracker.phase_history = [(p, t) for p, t in history]
+            tracker.event_history = data.get("event_history", [])
+            tracker.prompt_history = data.get("prompt_history", [])
         return tracker

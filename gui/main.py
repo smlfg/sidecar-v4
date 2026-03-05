@@ -39,8 +39,7 @@ class SidecarApp(BaseApp):
         self._findings_label = None
         self._FINDINGS_PAGE = 2  # 0=Status,1=Rules,2=Findings,3=Sessions
         self._refresh_interval = 5
-        self._error_count = 0  # Track consecutive errors to avoid flicker
-        self._pending_responses = 0  # Track in-flight requests
+        self._refresh_in_flight = False  # Guard against overlapping requests
 
         self._build_ui()
 
@@ -69,63 +68,55 @@ class SidecarApp(BaseApp):
         self.content_box.pack_start(self._notebook, True, True, 0)
 
     def _refresh_all(self) -> bool:
-        """Fetch status, rules, and findings from daemon."""
+        """Single dashboard call — one socket connection, no race conditions."""
         if not is_daemon_reachable():
+            self._refresh_in_flight = False
             self._status_tab.show_disconnected()
             self.set_status("Disconnected — daemon not running", "status-error")
             return True  # keep timer
 
-        # Track how many requests are in-flight to batch error handling
-        self._pending_responses = 4
-        self._error_count = 0
+        # Skip if previous request hasn't returned yet
+        if self._refresh_in_flight:
+            return True
 
-        send_command({"cmd": "status"}, self._on_status_response, self._on_cmd_error)
-        send_command({"cmd": "rules"}, self._on_rules_response, self._on_cmd_error)
-        send_command({"cmd": "findings"}, self._on_findings_response, self._on_cmd_error)
-        send_command({"cmd": "sessions"}, self._on_sessions_response, self._on_cmd_error)
+        self._refresh_in_flight = True
+        send_command({"cmd": "dashboard"}, self._on_dashboard, self._on_dashboard_error)
         return True  # keep timer
 
-    def _track_success(self):
-        """Mark one request as successfully completed."""
-        self._pending_responses = max(0, self._pending_responses - 1)
+    def _on_dashboard(self, data):
+        """Handle combined dashboard response — update all tabs at once."""
+        self._refresh_in_flight = False
 
-    def _on_cmd_error(self, msg):
-        """Handle error from one of the 4 commands — only show disconnect if ALL fail."""
-        self._error_count += 1
-        self._pending_responses = max(0, self._pending_responses - 1)
-        # Only show disconnected when all pending requests have resolved and all failed
-        if self._pending_responses == 0 and self._error_count >= 4:
-            self._status_tab.show_disconnected()
-            self.set_status(f"Error: {msg}", "status-error")
-
-    def _on_status_response(self, data):
-        self._track_success()
-        self._status_tab.update(data)
-        status = data.get("status", "unknown")
-        rules = data.get("rule_count", 0)
-        findings = data.get("total_findings", 0)
+        # Status
+        status_data = data.get("status", {})
+        self._status_tab.update(status_data)
+        rules = status_data.get("rule_count", 0)
+        findings = status_data.get("total_findings", 0)
         self.set_status(f"Connected — {rules} rules, {findings} findings", "status-saved")
 
-    def _on_rules_response(self, data):
-        self._track_success()
-        self._rules_tab.update(data)
+        # Rules
+        self._rules_tab.update({"rules": data.get("rules", [])})
 
-    def _on_findings_response(self, data):
-        self._track_success()
-        self._findings_tab.update(data)
+        # Findings
+        self._findings_tab.update({"findings": data.get("findings", [])})
         if self._findings_tab.had_new_findings:
             self._findings_label.set_markup('<b>Findings</b> <span foreground="#a6e3a1">●</span>')
             GLib.timeout_add(3000, self._reset_findings_label)
         else:
             self._reset_findings_label()
 
+        # Sessions
+        self._sessions_tab.update({"sessions": data.get("sessions", [])})
+
+    def _on_dashboard_error(self, msg):
+        """Dashboard failed — show disconnected. No flicker: guard prevents overlap."""
+        self._refresh_in_flight = False
+        self._status_tab.show_disconnected()
+        self.set_status(f"Error: {msg}", "status-error")
+
     def _reset_findings_label(self) -> bool:
         self._findings_label.set_text("Findings")
         return False  # one-shot
-
-    def _on_sessions_response(self, data):
-        self._track_success()
-        self._sessions_tab.update(data)
 
     def _on_tab_switch(self, _notebook, _page, page_num):
         """Speed up polling when Findings tab is active."""
@@ -156,8 +147,8 @@ class SidecarApp(BaseApp):
         def _after_action(data):
             msg = data.get("message", f"{action}: {rule_name}")
             self.set_status(msg, "status-saved")
-            # Refresh rules after action
-            send_command({"cmd": "rules"}, self._on_rules_response, self._on_error)
+            # Refresh after action
+            self._refresh_all()
 
         send_command(cmd, _after_action, self._on_error)
 

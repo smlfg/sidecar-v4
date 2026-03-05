@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sessions Tab — Active Claude sessions overview."""
+"""Sessions Tab — Active Claude sessions overview with project names."""
 
 import gi
 
@@ -7,16 +7,19 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk
 
 import sys
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path.home() / "Projekte" / "ClaudeCodePanel"))
 from theme import get_palette
 
 # ListStore column indices
-COL_ID = 0
-COL_CALLS = 1
-COL_FILES = 2
-COL_HISTORY = 3
+COL_PROJECT = 0
+COL_PHASE = 1
+COL_CALLS = 2
+COL_FILES = 3
+COL_STARTED = 4
+COL_ID = 5  # hidden, for reference
 
 
 class SessionsTab(Gtk.Box):
@@ -45,25 +48,26 @@ class SessionsTab(Gtk.Box):
         header.pack_start(self._count_label, False, False, 0)
         self.pack_start(header, False, False, 0)
 
-        # ListStore: id, total_calls, files_touched, history_len
-        self._store = Gtk.ListStore(str, str, str, str)
+        # ListStore: project, phase, calls, files, started, id(hidden)
+        self._store = Gtk.ListStore(str, str, str, str, str, str)
 
         tree = Gtk.TreeView(model=self._store)
         tree.set_headers_visible(True)
         tree.get_style_context().add_class("base-card")
 
         columns = [
-            ("ID", COL_ID),
-            ("Calls", COL_CALLS),
-            ("Files", COL_FILES),
-            ("History", COL_HISTORY),
+            ("Project", COL_PROJECT, 150),
+            ("Phase", COL_PHASE, 100),
+            ("Calls", COL_CALLS, 60),
+            ("Files", COL_FILES, 60),
+            ("Started", COL_STARTED, 120),
         ]
-        for title, col_idx in columns:
+        for title, col_idx, min_w in columns:
             renderer = Gtk.CellRendererText()
             col = Gtk.TreeViewColumn(title, renderer, text=col_idx)
             col.set_resizable(True)
-            if col_idx == COL_ID:
-                col.set_min_width(90)
+            col.set_min_width(min_w)
+            col.set_sort_column_id(col_idx)
             tree.append_column(col)
 
         scrolled = Gtk.ScrolledWindow()
@@ -83,9 +87,21 @@ class SessionsTab(Gtk.Box):
 
         self._store.clear()
         for s in sessions:
+            project = str(s.get("project", "–"))
+            phase = str(s.get("phase", "–"))
+            calls = str(s.get("total_calls", "–"))
+            files = str(s.get("files_touched", "–"))
             sid = str(s.get("id", ""))[:12]
-            calls = str(s.get("total_calls", "--"))
-            files = str(s.get("files_touched", "--"))
-            history = str(s.get("history_len", "--"))
 
-            self._store.append([sid, calls, files, history])
+            # Format start time
+            start_ts = s.get("start_ts", 0)
+            if start_ts:
+                try:
+                    dt = datetime.fromtimestamp(start_ts)
+                    started = dt.strftime("%H:%M · %d.%m.")
+                except (OSError, ValueError):
+                    started = "–"
+            else:
+                started = "–"
+
+            self._store.append([project, phase, calls, files, started, sid])

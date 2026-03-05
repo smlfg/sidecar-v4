@@ -21,6 +21,9 @@ import time
 # Plugin system
 from plugin_loader import PluginLoader
 from phase_tracker import PhaseTracker
+from session_watcher import SessionWatcher
+from context_selector import ContextSelector
+from skill_recommender import SkillRecommender
 
 # --- Config ---
 SOCKET_PATH = "/tmp/claude-sidecar.sock"
@@ -406,6 +409,10 @@ class SidecarState:
         self._start_ts = time.time()
         self.registry = RuleRegistry()
         self._pending_opencode_fires: dict = {}  # session_id -> call count since last fire
+        # v2.0: Context-aware components
+        self.context_selector = ContextSelector()
+        self.skill_recommender = SkillRecommender()
+        self.session_watcher = SessionWatcher(on_event=self._on_watcher_event)
         self.register_builtin_rules()
 
     def register_builtin_rules(self):
@@ -544,6 +551,8 @@ class SidecarState:
 
         # Load rule plugins
         self.plugin_loader.load()
+        # v2.0: Register skill recommender as additional plugin
+        self.plugin_loader.plugins.append(self.skill_recommender)
 
         self.loaded = True
         _log(f"Companion files loaded: {len(self.anti_patterns)} patterns, {len(self.skill_triggers)} skill triggers, {len(self.plugin_loader.plugins)} rule plugins")
@@ -559,12 +568,50 @@ class SidecarState:
                 self.phase_trackers[session_id] = PhaseTracker()
         return self.phase_trackers[session_id]
 
+    def _on_watcher_event(self, event: dict):
+        """Callback from SessionWatcher — feed events into phase tracker."""
+        session_id = event.get("session_id", "")
+        if not session_id:
+            return
+        try:
+            state = _load_session_state(session_id)
+            tracker = self.get_phase_tracker(session_id, state)
+            # Record event for multi-turn analysis
+            tracker.record_event({
+                "type": event.get("type", ""),
+                "tool": event.get("tool_name", ""),
+                "content": event.get("content", ""),
+                "ts": event.get("timestamp", time.time()),
+                "had_error": event.get("had_error", False),
+            })
+            # Update phase from tool usage
+            if event.get("type") == "tool_use":
+                tracker.update_from_tool(
+                    event.get("tool_name", ""),
+                    event.get("tool_input", {}),
+                    event.get("had_error", False),
+                )
+            elif event.get("type") == "user_message":
+                tracker.update_from_prompt(event.get("content", ""))
+        except Exception as e:
+            _log(f"watcher event handler error: {e}")
+
 
 # --- Session State (file-based) ---
 
 def _state_path(session_id: str) -> str:
     safe = session_id.replace("/", "_").replace("\\", "_")[:32]
     return os.path.join(STATE_DIR, f"sidecar-{safe}.json")
+
+
+def _extract_project_name(transcript_path: str) -> str:
+    """Extract project name from Claude Code transcript path.
+    Format: /.../.claude/projects/-home-smlflg-Projekte-Sidecar/abc123.jsonl
+    Returns e.g. 'Sidecar'
+    """
+    parent = os.path.basename(os.path.dirname(transcript_path))
+    parts = [p for p in parent.split("-") if p]
+    return parts[-1] if parts else ""
 
 
 def _lock_path(session_id: str) -> str:
@@ -580,6 +627,7 @@ def _load_session_state(session_id: str) -> dict:
         "files_touched": [],
         "total_calls": 0,
         "recap_done": False,
+        "project_name": "",
     }
     try:
         with open(_state_path(session_id), "r") as f:
@@ -852,6 +900,11 @@ def _process_event(event: dict, daemon_state: SidecarState) -> dict:
 
             if state["session_start_ts"] == 0:
                 state["session_start_ts"] = now_ts
+
+            if not state.get("project_name"):
+                tp = event.get("transcript_path", "")
+                if tp:
+                    state["project_name"] = _extract_project_name(tp)
             state["total_calls"] = state.get("total_calls", 0) + 1
 
             summary = _summarize_tool_call(tool_name, tool_input)
@@ -1012,8 +1065,24 @@ def _process_prompt(event: dict, daemon_state: SidecarState) -> dict:
             "history": state.get("history", []),
         }
 
-        # Run plugin matcher
+        # v2.0: Use ContextSelector for targeted context instead of bulk-loading
+        daemon_state.context_selector.phase_tracker = tracker
+        selected_context = daemon_state.context_selector.select(
+            prompt, state.get("history", []), phase
+        )
+
+        # v2.0: Update skill recommender phase and run via plugin system
+        daemon_state.skill_recommender.set_phase(phase)
+
+        # Run plugin matcher (includes skill_recommender if registered)
         injection = daemon_state.plugin_loader.match_rules(prompt, plugin_context)
+
+        # v2.0: Multi-turn pattern analysis
+        tracker.record_event({"type": "prompt", "content": prompt, "ts": time.time()})
+        pattern_warnings = tracker.analyze_patterns()
+        pattern_text = ""
+        if pattern_warnings:
+            pattern_text = "\n".join(f"[SIDECAR] {w}" for w in pattern_warnings)
 
         # Session-start recap reminder
         recap_reminder = ""
@@ -1025,14 +1094,19 @@ def _process_prompt(event: dict, daemon_state: SidecarState) -> dict:
                 "bevor du weiterarbeitest. Session-Hygiene verhindert Kontext-Verlust."
             )
 
-        if not injection and not recap_reminder:
+        has_content = injection or recap_reminder or selected_context or pattern_text
+        if not has_content:
             _log(f"session={session_id[:8]} prompt_len={len(prompt)} phase={phase} rules_fired=0")
             return {}
 
-        # Add phase info as prefix
-        context_parts = [f"[SIDECAR-CONTEXT] Phase: {phase}"]
+        # v2.0: Assemble targeted context (selected_context replaces bulk-loading)
+        context_parts = []
+        if selected_context:
+            context_parts.append(selected_context)
         if injection:
             context_parts.append(injection)
+        if pattern_text:
+            context_parts.append(pattern_text)
         if recap_reminder:
             context_parts.append(recap_reminder)
         context = "\n".join(context_parts)
@@ -1117,14 +1191,37 @@ def _handle_command(cmd_data: dict, daemon_state: SidecarState) -> dict:
                 sid = f.replace("sidecar-", "").replace(".json", "")
                 try:
                     state = _load_session_state(sid)
+                    # Derive project name from files_touched
+                    files = state.get("files_touched", [])
+                    project = ""
+                    for fp in files:
+                        if "/Projekte/" in fp:
+                            parts = fp.split("/Projekte/")[1].split("/")
+                            if parts:
+                                project = parts[0]
+                                break
+                    if not project and files:
+                        # Fallback: use deepest common directory name
+                        project = os.path.basename(os.path.dirname(files[0]))
+                    phase = ""
+                    pt = state.get("phase_tracker", {})
+                    if pt:
+                        phase = pt.get("current_phase", "")
+                    # Human-readable start time
+                    start_ts = state.get("session_start_ts", 0)
                     sessions.append({
                         "id": sid,
+                        "project": project or "–",
+                        "phase": phase or "–",
+                        "start_ts": start_ts,
                         "total_calls": state.get("total_calls", 0),
-                        "files_touched": len(state.get("files_touched", [])),
+                        "files_touched": len(files),
                         "history_len": len(state.get("history", [])),
                     })
                 except Exception:
                     pass
+        # Sort by start time, newest first
+        sessions.sort(key=lambda s: s.get("start_ts", 0), reverse=True)
         return {"sessions": sessions}
 
     elif cmd == "session":
@@ -1142,6 +1239,56 @@ def _handle_command(cmd_data: dict, daemon_state: SidecarState) -> dict:
 
     elif cmd == "findings":
         return {"findings": daemon_state.registry.findings}
+
+    elif cmd == "dashboard":
+        # Combined response — one socket call instead of four
+        sessions = []
+        for f in os.listdir(STATE_DIR):
+            if f.startswith("sidecar-") and f.endswith(".json"):
+                sid = f.replace("sidecar-", "").replace(".json", "")
+                try:
+                    state = _load_session_state(sid)
+                    files = state.get("files_touched", [])
+                    # Use stored project_name (from transcript path), fallback to files_touched
+                    project = state.get("project_name", "")
+                    if not project:
+                        for fp in files:
+                            if "/Projekte/" in fp:
+                                parts = fp.split("/Projekte/")[1].split("/")
+                                if parts:
+                                    project = parts[0]
+                                    break
+                        if not project and files:
+                            project = os.path.basename(os.path.dirname(files[0]))
+                    pt = state.get("phase_tracker", {})
+                    sessions.append({
+                        "id": sid,
+                        "project": project or "–",
+                        "phase": pt.get("current_phase", "–") if pt else "–",
+                        "start_ts": state.get("session_start_ts", 0),
+                        "total_calls": state.get("total_calls", 0),
+                        "files_touched": len(files),
+                        "history_len": len(state.get("history", [])),
+                    })
+                except Exception:
+                    pass
+        sessions.sort(key=lambda s: s.get("start_ts", 0), reverse=True)
+        return {
+            "status": {
+                "status": "running",
+                "pid": os.getpid(),
+                "uptime_s": int(time.time() - daemon_state._start_ts),
+                "rule_count": len(daemon_state.registry.rules),
+                "total_findings": len(daemon_state.registry.findings),
+                "companions_loaded": daemon_state.loaded,
+                "patterns": len(daemon_state.anti_patterns),
+                "skill_triggers": len(daemon_state.skill_triggers),
+                "plugins": len(daemon_state.plugin_loader.plugins),
+            },
+            "rules": daemon_state.registry.all_rules_info(),
+            "findings": daemon_state.registry.findings,
+            "sessions": sessions,
+        }
 
     elif cmd == "reload":
         daemon_state.load_companion_files()
@@ -1221,11 +1368,17 @@ def main():
     daemon_state = SidecarState()
     daemon_state.load_companion_files()
 
+    # v2.0: Start session watcher thread
+    daemon_state.session_watcher.start()
+    _log("v2.0: SessionWatcher started")
+
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
     def _shutdown(sig, frame):
         _log(f"Received signal {sig}, shutting down...")
+        daemon_state.session_watcher.stop()
+        _log("v2.0: SessionWatcher stopped")
         loop.call_soon_threadsafe(loop.stop)
 
     signal.signal(signal.SIGTERM, _shutdown)
