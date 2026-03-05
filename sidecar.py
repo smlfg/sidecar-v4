@@ -14,6 +14,7 @@ import fcntl
 import json
 import os
 import signal
+import subprocess
 import sys
 import tempfile
 import time
@@ -50,6 +51,22 @@ SOFT_ERROR_PATTERNS = [
 ]
 
 SELF_MARKERS = ["[PATTERN WATCHER]", "[MINIMAX WATCHER]", "[CODEX ZWEITMEINUNG]", "[SIDECAR]"]
+
+
+# --- Desktop Notifications ---
+
+def _notify(title: str, body: str, urgency: str = "normal", daemon_state=None) -> None:
+    """Desktop notification via notify-send. Fire-and-forget, never crash."""
+    if daemon_state and not daemon_state.notifications_enabled:
+        return
+    try:
+        subprocess.Popen(
+            ["notify-send", f"--urgency={urgency}", "--app-name=Sidecar",
+             "--icon=dialog-information", title, body],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
 
 
 # --- Logging ---
@@ -421,7 +438,19 @@ class SidecarState:
         self.llm_judge = LLMJudge(rules_path=_rules_path)
         # v4.0: Deep Judge Agent — autonomous coach with knowledge base
         self.deep_judge = DeepJudge()
+        # v4.1: Desktop notifications for Samuel
+        self.notifications_enabled = True
+        self._load_notify_setting()
         self.register_builtin_rules()
+
+    def _load_notify_setting(self):
+        """Load notifications_enabled from overrides file."""
+        try:
+            with open(OVERRIDES_PATH, "r") as f:
+                overrides = json.load(f)
+            self.notifications_enabled = overrides.get("notifications_enabled", True)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
 
     def record_injection(self, session_id, hook_type, context_text, sources):
         """Record an injection for audit/transparency."""
@@ -965,6 +994,7 @@ def _process_event(event: dict, daemon_state: SidecarState) -> dict:
                         if rule["trigger"](state["history"], tool_name, tool_input, event):
                             daemon_state.registry.fire(name, rule["message"])
                             _log(f"GATE BLOCK: {name} — {rule['message']}")
+                            _notify("Sidecar GATE", f"{name}: {rule['message']}", "critical", daemon_state)
                             _save_session_state(session_id, state)
                             result = {"decision": "block", "reason": f"[SIDECAR GATE] {name}: {rule['message']}"}
                             return result
@@ -1037,6 +1067,10 @@ def _process_event(event: dict, daemon_state: SidecarState) -> dict:
                         _log("DEEP-JUDGE: no event loop available")
 
             _log(f"session={session_id[:8]} tool={tool_name} findings={len(all_findings)} score={concern_score} output={should_output}")
+
+            if should_output and concern_score >= 3:
+                summary = "; ".join(all_findings[:2])
+                _notify("Sidecar Pattern", summary, "normal", daemon_state)
 
             if should_output:
                 lines = ["[SIDECAR] Pattern-Analyse:"]
@@ -1210,12 +1244,16 @@ def _process_prompt(event: dict, daemon_state: SidecarState) -> dict:
             if not judge_comment:
                 judge_comment = daemon_state.llm_judge.on_turn(judge_ctx)
 
+        if judge_comment:
+            _notify("Sidecar Judge", judge_comment[:200], "low", daemon_state)
+
         # v4.0: Deep Judge — inject cached result from async evaluation
         deep_judge_comment = None
         if daemon_state.deep_judge.enabled:
             deep_judge_comment = daemon_state.deep_judge.get_cached_result(session_id)
             if deep_judge_comment:
                 _log(f"DEEP-JUDGE injecting cached result for session={session_id[:8]}")
+                _notify("Sidecar Deep Judge", deep_judge_comment[:200], "normal", daemon_state)
 
         has_content = injection or recap_reminder or selected_context or pattern_text or judge_comment or deep_judge_comment
         if not has_content:
@@ -1308,8 +1346,10 @@ def _handle_command(cmd_data: dict, daemon_state: SidecarState) -> dict:
             "patterns": len(daemon_state.anti_patterns),
             "skill_triggers": len(daemon_state.skill_triggers),
             "plugins": len(daemon_state.plugin_loader.plugins),
+            "skill_contents": len(daemon_state.skill_recommender._skill_contents),
             "llm_judge": daemon_state.llm_judge.status(),
             "deep_judge": daemon_state.deep_judge.status(),
+            "notifications": daemon_state.notifications_enabled,
         }
 
     elif cmd == "judge":
@@ -1404,12 +1444,17 @@ def _handle_command(cmd_data: dict, daemon_state: SidecarState) -> dict:
         if not sid:
             return {"error": "Missing session id"}
         state = _load_session_state(sid)
+        pt = state.get("phase_tracker", {})
         return {
             "session_id": sid,
+            "project_name": state.get("project_name", ""),
             "total_calls": state.get("total_calls", 0),
             "files_touched": state.get("files_touched", []),
-            "history": state.get("history", [])[-10:],  # last 10 entries
+            "history": state.get("history", [])[-10:],
             "recap_done": state.get("recap_done", False),
+            "phase": pt.get("current_phase", "unknown") if pt else "unknown",
+            "injection_history": state.get("injection_history", [])[-20:],
+            "session_start_ts": state.get("session_start_ts", 0),
         }
 
     elif cmd == "findings":
@@ -1470,9 +1515,29 @@ def _handle_command(cmd_data: dict, daemon_state: SidecarState) -> dict:
         reload_knowledge_index()
         return {"ok": True, "reindexed": True}
 
+    elif cmd == "notify":
+        action = cmd_data.get("action", "status")
+        if action == "status":
+            return {"notifications_enabled": daemon_state.notifications_enabled}
+        elif action == "on":
+            daemon_state.notifications_enabled = True
+            daemon_state.registry.overrides["notifications_enabled"] = True
+            daemon_state.registry.save_overrides()
+            _log("Notifications enabled")
+            return {"notifications_enabled": True, "message": "Notifications enabled"}
+        elif action == "off":
+            daemon_state.notifications_enabled = False
+            daemon_state.registry.overrides["notifications_enabled"] = False
+            daemon_state.registry.save_overrides()
+            _log("Notifications disabled")
+            return {"notifications_enabled": False, "message": "Notifications disabled"}
+        else:
+            return {"error": f"Unknown notify action: {action}"}
+
     elif cmd == "reload":
         daemon_state.load_companion_files()
         daemon_state.registry._load_overrides()
+        daemon_state._load_notify_setting()
         return {"ok": True, "reloaded": True}
 
     else:
@@ -1566,8 +1631,9 @@ def main():
     signal.signal(signal.SIGINT, _shutdown)
 
     def _reload(sig, frame):
-        _log("Received SIGHUP, reloading companion files...")
+        _log("Received SIGHUP, reloading companion files + skill cache...")
         daemon_state.load_companion_files()
+        daemon_state.skill_recommender.load_skill_files()
 
     signal.signal(signal.SIGHUP, _reload)
 
