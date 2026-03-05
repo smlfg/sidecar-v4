@@ -15,3 +15,6 @@ venv/
 # Runtime
 *.sock
 *.log
+
+# Personal knowledge base (contains private data)
+knowledge/
