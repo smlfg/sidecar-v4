@@ -24,6 +24,9 @@ class FindingsTab(Gtk.Box):
         self.set_margin_end(12)
 
         self._count_label = None
+        self._scrolled = None
+        self._last_seen_ts: float = 0.0
+        self.had_new_findings: bool = False
         self._build_ui()
 
     def _build_ui(self):
@@ -40,14 +43,14 @@ class FindingsTab(Gtk.Box):
         self.pack_start(header, False, False, 0)
 
         # Scrolled list
-        scrolled = Gtk.ScrolledWindow()
-        scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
-        scrolled.set_vexpand(True)
+        self._scrolled = Gtk.ScrolledWindow()
+        self._scrolled.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        self._scrolled.set_vexpand(True)
 
         self._listbox = Gtk.ListBox()
         self._listbox.set_selection_mode(Gtk.SelectionMode.NONE)
-        scrolled.add(self._listbox)
-        self.pack_start(scrolled, True, True, 0)
+        self._scrolled.add(self._listbox)
+        self.pack_start(self._scrolled, True, True, 0)
 
     def update(self, data: dict) -> None:
         """Update findings list from daemon response."""
@@ -57,6 +60,23 @@ class FindingsTab(Gtk.Box):
         self._count_label.set_markup(
             f'<b>Findings</b>  <span foreground="{p["overlay"]}">{len(findings)} total</span>'
         )
+
+        # Detect new findings (timestamp > last seen)
+        new_ts = 0.0
+        new_finding_indices: set[int] = set()
+        for i, f in enumerate(findings):
+            ts_raw = f.get("timestamp", "")
+            try:
+                ts = datetime.fromisoformat(ts_raw).timestamp()
+            except (ValueError, TypeError):
+                ts = 0.0
+            if ts > self._last_seen_ts:
+                new_finding_indices.add(i)
+            new_ts = max(new_ts, ts)
+
+        self.had_new_findings = bool(new_finding_indices)
+        if new_ts > self._last_seen_ts:
+            self._last_seen_ts = new_ts
 
         # Remove old rows
         for child in self._listbox.get_children():
@@ -72,15 +92,24 @@ class FindingsTab(Gtk.Box):
             self._listbox.show_all()
             return
 
-        for f in findings:
-            card = self._build_finding_card(f, p)
+        for i, f in enumerate(findings):
+            card = self._build_finding_card(f, p, is_new=(i in new_finding_indices))
             row = Gtk.ListBoxRow()
             row.add(card)
             self._listbox.add(row)
 
         self._listbox.show_all()
 
-    def _build_finding_card(self, finding: dict, p: dict) -> Gtk.Box:
+        # Auto-scroll to bottom when new findings arrived
+        if self.had_new_findings:
+            GLib.idle_add(self._scroll_to_bottom)
+
+    def _scroll_to_bottom(self) -> bool:
+        adj = self._scrolled.get_vadjustment()
+        adj.set_value(adj.get_upper() - adj.get_page_size())
+        return False  # one-shot idle
+
+    def _build_finding_card(self, finding: dict, p: dict, is_new: bool = False) -> Gtk.Box:
         """Build a single finding card widget."""
         severity = finding.get("severity", "info").lower()
         border_color = {
@@ -93,6 +122,12 @@ class FindingsTab(Gtk.Box):
         card.get_style_context().add_class("base-card")
         # Override border-left via inline approach: use a horizontal box with a colored bar
         outer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
+        if is_new:
+            outer.get_style_context().add_class("base-badge-warn")
+            # Remove highlight after 3 seconds
+            GLib.timeout_add(3000, lambda: (
+                outer.get_style_context().remove_class("base-badge-warn"), False
+            )[-1])
 
         # Colored bar
         bar = Gtk.DrawingArea()

@@ -26,6 +26,13 @@ import urllib.request
 import urllib.error
 from pathlib import Path
 
+try:
+    import evdev
+    from evdev import ecodes
+    HAS_EVDEV = True
+except ImportError:
+    HAS_EVDEV = False
+
 # ---------------------------------------------------------------------------
 # Config from environment
 # ---------------------------------------------------------------------------
@@ -36,6 +43,13 @@ LOG_PATH = os.environ.get("VOICE_BRIDGE_LOG", "/tmp/voice-bridge.log")
 CHIME_ENABLED = os.environ.get("CHIME_ENABLED", "true").lower() == "true"
 SAMPLE_RATE = 16000
 CHANNELS = 1
+
+# Push-to-Talk via evdev
+PTT_ENABLED = os.environ.get("VOICE_BRIDGE_PTT", "true").lower() == "true"
+PTT_MODIFIER = os.environ.get("VOICE_BRIDGE_PTT_MOD", "KEY_LEFTALT")  # evdev key name
+PTT_KEY = os.environ.get("VOICE_BRIDGE_PTT_KEY", "KEY_M")             # evdev key name
+PTT_DEVICE_NAME = os.environ.get("VOICE_BRIDGE_PTT_DEVICE", "")       # auto-detect if empty
+PTT_SUPPRESS_KEY = os.environ.get("VOICE_BRIDGE_PTT_SUPPRESS", "true").lower() == "true"
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -94,11 +108,17 @@ def _check_wtype() -> str | None:
     return None
 
 
-def _type_text(text: str, typer: str | None) -> None:
+def _type_text(text: str, typer: str | None, suppress_initial: bool = False) -> None:
     text = text.strip()
     if not text:
         return
     try:
+        if suppress_initial and typer == "wtype":
+            # Delete the stray 'm' from the PTT key-press
+            subprocess.run(["wtype", "-k", "BackSpace"], timeout=3, check=False)
+        elif suppress_initial and typer == "ydotool":
+            subprocess.run(["ydotool", "key", "14:1", "14:0"], timeout=3, check=False)
+
         if typer == "wtype":
             subprocess.run(["wtype", "--", text], timeout=10, check=False)
         elif typer == "ydotool":
@@ -223,7 +243,7 @@ def _transcribe(wav_path: str) -> str:
 # ---------------------------------------------------------------------------
 # Main recording session
 # ---------------------------------------------------------------------------
-def _run_session(typer: str | None) -> None:
+def _run_session(typer: str | None, suppress_initial: bool = False) -> None:
     """One full record → transcribe → type cycle."""
     with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp:
         wav_path = tmp.name
@@ -238,7 +258,7 @@ def _run_session(typer: str | None) -> None:
 
         text = _transcribe(wav_path)
         if text:
-            _type_text(text, typer)
+            _type_text(text, typer, suppress_initial=suppress_initial)
     finally:
         try:
             os.unlink(wav_path)
@@ -325,6 +345,126 @@ def _pipe_listener(typer: str | None) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Push-to-Talk via evdev (Wayland-compatible)
+# ---------------------------------------------------------------------------
+def _find_keyboard() -> "evdev.InputDevice | None":
+    """Find the keyboard device for PTT. Prefers PTT_DEVICE_NAME if set."""
+    if not HAS_EVDEV:
+        return None
+
+    devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
+    # Prefer user-configured device name
+    if PTT_DEVICE_NAME:
+        for dev in devices:
+            if PTT_DEVICE_NAME.lower() in dev.name.lower():
+                log.info("PTT device (by name): %s [%s]", dev.name, dev.path)
+                return dev
+
+    # Auto-detect: find first keyboard with KEY_M capability
+    for dev in devices:
+        caps = dev.capabilities(verbose=False).get(ecodes.EV_KEY, [])
+        if ecodes.KEY_M in caps and ecodes.KEY_LEFTALT in caps:
+            # Skip mice, consumer controls, etc.
+            name_lower = dev.name.lower()
+            if any(skip in name_lower for skip in ("mouse", "consumer", "trackpoint", "touchpad", "video", "button", "avrcp")):
+                continue
+            log.info("PTT device (auto): %s [%s]", dev.name, dev.path)
+            return dev
+
+    log.warning("No suitable keyboard device found for PTT")
+    return None
+
+
+def _ptt_listener(typer: str | None) -> None:
+    """Listen for Push-to-Talk key combo via evdev."""
+    if not HAS_EVDEV:
+        log.warning("evdev not installed — PTT disabled. Install: pip install evdev")
+        return
+
+    dev = _find_keyboard()
+    if dev is None:
+        return
+
+    mod_code = getattr(ecodes, PTT_MODIFIER, None)
+    key_code = getattr(ecodes, PTT_KEY, None)
+    if mod_code is None or key_code is None:
+        log.error("Invalid PTT keys: %s + %s", PTT_MODIFIER, PTT_KEY)
+        return
+
+    log.info("PTT ready: hold %s + %s to record (device: %s)", PTT_MODIFIER, PTT_KEY, dev.name)
+
+    mod_held = False
+    session_thread: threading.Thread | None = None
+    grabbed = False
+
+    try:
+        for event in dev.read_loop():
+            if _shutdown.is_set():
+                break
+
+            if event.type != ecodes.EV_KEY:
+                continue
+
+            # event.value: 0=release, 1=press, 2=repeat
+            if event.code == mod_code:
+                mod_held = event.value in (1, 2)
+                # If mod released while recording → stop
+                if event.value == 0 and _recording.is_set():
+                    log.info("PTT: modifier released → stop recording")
+                    _recording.clear()
+                    if grabbed:
+                        try:
+                            dev.ungrab()
+                        except Exception:
+                            pass
+                        grabbed = False
+
+            elif event.code == key_code:
+                if event.value == 1 and mod_held and not _recording.is_set():
+                    # Key pressed while modifier held → start recording
+                    log.info("PTT: %s+%s pressed → start recording", PTT_MODIFIER, PTT_KEY)
+                    try:
+                        dev.grab()
+                        grabbed = True
+                    except Exception as exc:
+                        log.warning("Could not grab keyboard: %s (continuing without grab)", exc)
+                    _recording.set()
+                    session_thread = threading.Thread(
+                        target=_run_session,
+                        args=(typer,),
+                        kwargs={"suppress_initial": PTT_SUPPRESS_KEY},
+                        daemon=True,
+                    )
+                    session_thread.start()
+
+                elif event.value == 0 and _recording.is_set():
+                    # Key released → stop recording
+                    log.info("PTT: key released → stop recording")
+                    _recording.clear()
+                    if grabbed:
+                        try:
+                            dev.ungrab()
+                        except Exception:
+                            pass
+                        grabbed = False
+
+    except Exception as exc:
+        if not _shutdown.is_set():
+            log.error("PTT listener crashed: %s", exc)
+    finally:
+        if grabbed:
+            try:
+                dev.ungrab()
+            except Exception:
+                pass
+        try:
+            dev.close()
+        except Exception:
+            pass
+        log.info("PTT listener stopped")
+
+
+# ---------------------------------------------------------------------------
 # Signal handling
 # ---------------------------------------------------------------------------
 def _handle_signal(signum, frame):
@@ -355,7 +495,16 @@ def main():
         log.error("Could not create named pipe: %s", exc)
         sys.exit(1)
 
-    log.info("Ready. Send commands to %s: start | stop | toggle | quit", PIPE_PATH)
+    # Start Push-to-Talk listener in background thread
+    ptt_thread = None
+    if PTT_ENABLED and HAS_EVDEV:
+        ptt_thread = threading.Thread(target=_ptt_listener, args=(typer,), daemon=True)
+        ptt_thread.start()
+        log.info("PTT listener started (%s + %s)", PTT_MODIFIER, PTT_KEY)
+    elif PTT_ENABLED and not HAS_EVDEV:
+        log.warning("PTT requested but evdev not installed. Pipe-only mode.")
+
+    log.info("Ready. Pipe: %s | PTT: %s+%s", PIPE_PATH, PTT_MODIFIER, PTT_KEY)
 
     _pipe_listener(typer)
 

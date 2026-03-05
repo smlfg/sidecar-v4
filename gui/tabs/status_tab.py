@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Status Tab — Daemon status overview with key-value grid."""
 
+import shutil
+import subprocess
+
 import gi
 
 gi.require_version("Gtk", "3.0")
@@ -75,6 +78,47 @@ class StatusTab(Gtk.Box):
             self._fields[key] = val_lbl
 
         self.pack_start(grid, False, False, 0)
+
+        # Action buttons
+        btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        btn_box.set_margin_top(12)
+
+        stop_btn = Gtk.Button(label="Stop Daemon")
+        stop_btn.connect("clicked", self._on_stop)
+        btn_box.pack_start(stop_btn, False, False, 0)
+
+        log_btn = Gtk.Button(label="View Log")
+        log_btn.connect("clicked", self._on_view_log)
+        btn_box.pack_start(log_btn, False, False, 0)
+
+        self.pack_start(btn_box, False, False, 0)
+
+    def _on_stop(self, _btn):
+        try:
+            subprocess.Popen(["systemctl", "--user", "stop", "sidecar"])
+        except FileNotFoundError:
+            self._show_error("systemctl not found")
+        except OSError as e:
+            self._show_error(str(e))
+
+    def _on_view_log(self, _btn):
+        log_path = "/tmp/claude-sidecar.log"
+        terminals = ["cosmic-term", "kitty", "xterm", "gnome-terminal"]
+        for term in terminals:
+            if shutil.which(term):
+                try:
+                    subprocess.Popen([term, "--", "tail", "-f", log_path])
+                    return
+                except OSError:
+                    continue
+        self._show_error("No terminal emulator found")
+
+    def _show_error(self, msg: str) -> None:
+        """Show error in status field."""
+        p = get_palette()
+        self._fields["status"].set_markup(
+            f'<span foreground="{p["red"]}" font_family="monospace">{msg}</span>'
+        )
 
     def update(self, data: dict) -> None:
         """Update status display from daemon response."""

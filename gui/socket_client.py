@@ -85,7 +85,7 @@ def send_command(cmd_data: dict, callback, error_callback=None) -> None:
 
     def _finish():
         sock.close()
-        raw_resp = b"".join(chunks).decode()
+        raw_resp = b"".join(chunks).decode(errors="replace")
         if not raw_resp:
             if error_callback:
                 GLib.idle_add(error_callback, "Empty response")
