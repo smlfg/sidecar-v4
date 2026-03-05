@@ -22,6 +22,7 @@ def _send_command(cmd_data: dict) -> dict:
         sys.exit(1)
     cmd_data["_type"] = "cmd"
     sock.sendall(json.dumps(cmd_data).encode())
+    sock.shutdown(socket.SHUT_WR)
     chunks = []
     while True:
         try:
@@ -61,6 +62,24 @@ def cmd_status(args):
     print("Patterns:    {}".format(resp.get("patterns", 0)))
     print("Skills:      {}".format(resp.get("skill_triggers", 0)))
     print("Plugins:     {}".format(resp.get("plugins", 0)))
+    judge = resp.get("llm_judge", {})
+    if judge:
+        budget = judge.get("budget", {})
+        judge_str = "{} ({}, ${:.4f}/${})".format(
+            "enabled" if judge.get("enabled") else "disabled",
+            judge.get("provider", "?"),
+            budget.get("spent", 0),
+            budget.get("limit", 0.05),
+        )
+        print("LLM Judge:   {}".format(judge_str))
+    deep = resp.get("deep_judge", {})
+    if deep:
+        deep_str = "{} (${:.4f}, {} calls)".format(
+            "enabled" if deep.get("enabled") else "disabled",
+            deep.get("budget", {}).get("total_spent", 0),
+            deep.get("budget", {}).get("total_calls", 0),
+        )
+        print("Deep Judge:  {}".format(deep_str))
 
 
 def cmd_rules(args):
@@ -221,6 +240,14 @@ def cmd_reload(args):
     print(resp.get("message", "Reload triggered."))
 
 
+def cmd_reindex(args):
+    resp = _send_command({"cmd": "reindex"})
+    if resp.get("reindexed"):
+        print("Knowledge index reloaded.")
+    else:
+        print("Error: {}".format(resp.get("error", "unknown")))
+
+
 def cmd_log(args):
     lines = args.lines if args.lines is not None else 20
     log_file = Path(LOG_PATH)
@@ -282,6 +309,39 @@ def _print_injection(inj):
     print()
 
 
+def cmd_judge(args):
+    payload = {"cmd": "judge", "subcmd": args.action}
+    if args.action == "provider" and args.value:
+        payload["provider"] = args.value
+    resp = _send_command(payload)
+    if "error" in resp:
+        print("Error: {}".format(resp["error"]))
+        sys.exit(1)
+    if args.action == "status":
+        print("Enabled:     {}".format(resp.get("enabled", False)))
+        print("Provider:    {}".format(resp.get("provider", "?")))
+        budget = resp.get("budget", {})
+        print("Budget:      ${:.4f} / ${} ({:.1f}%)".format(
+            budget.get("spent", 0), budget.get("limit", 0.05), budget.get("pct", 0)))
+        print("Calls today: {}".format(budget.get("calls", 0)))
+        print("Interval:    every {} turns".format(resp.get("periodic_interval", 6)))
+        print("Cache:       {} entries".format(resp.get("cache_size", 0)))
+    elif args.action == "toggle":
+        print("LLM Judge: {}".format("enabled" if resp.get("enabled") else "disabled"))
+    elif args.action == "provider":
+        print("Provider: {} (enabled={})".format(resp.get("provider"), resp.get("enabled")))
+    elif args.action == "deep":
+        print("=== Deep Judge (v4) ===")
+        print("Enabled:     {}".format(resp.get("enabled", False)))
+        budget = resp.get("budget", {})
+        print("Budget:      ${:.4f} total, {} calls".format(
+            budget.get("total_spent", 0), budget.get("total_calls", 0)))
+        print("Session cap: ${}".format(budget.get("session_cap", 0.03)))
+        print("Sessions:    {}".format(budget.get("active_sessions", 0)))
+        print("Cached:      {} results".format(resp.get("cached_results", 0)))
+        print("Pending:     {} evaluations".format(resp.get("pending", 0)))
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="sidecar-ctl",
@@ -331,6 +391,16 @@ def main():
     p_context.add_argument("-n", type=int, default=None, help="Number of entries (default 10)")
     p_context.add_argument("--live", action="store_true", help="Live polling every 2s")
 
+    # reindex
+    subparsers.add_parser("reindex", help="Regenerate knowledge_index.json")
+
+    # judge
+    p_judge = subparsers.add_parser("judge", help="LLM Judge control")
+    p_judge.add_argument("action", nargs="?", default="status",
+                         choices=["status", "toggle", "provider", "deep"],
+                         help="Action (default: status)")
+    p_judge.add_argument("value", nargs="?", help="Provider name for 'provider' action")
+
     args = parser.parse_args()
 
     dispatch = {
@@ -345,6 +415,8 @@ def main():
         "reload": cmd_reload,
         "log": cmd_log,
         "context": cmd_context,
+        "reindex": cmd_reindex,
+        "judge": cmd_judge,
     }
 
     try:

@@ -25,6 +25,7 @@ from session_watcher import SessionWatcher
 from context_selector import ContextSelector
 from skill_recommender import SkillRecommender
 from llm_judge import LLMJudge
+from judge_agent import DeepJudge, reload_index as reload_knowledge_index
 
 # --- Config ---
 SOCKET_PATH = "/tmp/claude-sidecar.sock"
@@ -418,6 +419,8 @@ class SidecarState:
         # v3.0: LLM Judge — quality control via cheap LLM
         _rules_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "coaching_rules.txt")
         self.llm_judge = LLMJudge(rules_path=_rules_path)
+        # v4.0: Deep Judge Agent — autonomous coach with knowledge base
+        self.deep_judge = DeepJudge()
         self.register_builtin_rules()
 
     def record_injection(self, session_id, hook_type, context_text, sources):
@@ -1001,6 +1004,38 @@ def _process_event(event: dict, daemon_state: SidecarState) -> dict:
             cooldown_ok = (now - last_ts) >= CONCERN_COOLDOWN_SECONDS
             should_output = bool(all_findings) and cooldown_ok
 
+            # v4.0: Deep Judge — trigger on significant events (async)
+            phase_changed = False
+            tracker = daemon_state.get_phase_tracker(session_id, state)
+            if hasattr(tracker, 'current_phase'):
+                old_deep_phase = state.get("_deep_judge_last_phase", "")
+                if old_deep_phase and old_deep_phase != tracker.current_phase:
+                    phase_changed = True
+                state["_deep_judge_last_phase"] = tracker.current_phase
+
+            if daemon_state.deep_judge.enabled:
+                deep_trigger = daemon_state.deep_judge.should_trigger(
+                    {"total_calls": state.get("total_calls", 0),
+                     "phase": tracker.current_phase if hasattr(tracker, 'current_phase') else "unknown",
+                     "history": state.get("history", [])},
+                    concern_score=concern_score,
+                    phase_changed=phase_changed,
+                )
+                if deep_trigger:
+                    deep_ctx = {
+                        "phase": tracker.current_phase if hasattr(tracker, 'current_phase') else "unknown",
+                        "total_calls": state.get("total_calls", 0),
+                        "history": state.get("history", []),
+                    }
+                    try:
+                        loop = asyncio.get_running_loop()
+                        daemon_state.deep_judge.evaluate_async(
+                            session_id, deep_ctx, deep_trigger, loop
+                        )
+                        _log(f"DEEP-JUDGE triggered: {deep_trigger} session={session_id[:8]}")
+                    except RuntimeError:
+                        _log("DEEP-JUDGE: no event loop available")
+
             _log(f"session={session_id[:8]} tool={tool_name} findings={len(all_findings)} score={concern_score} output={should_output}")
 
             if should_output:
@@ -1175,7 +1210,14 @@ def _process_prompt(event: dict, daemon_state: SidecarState) -> dict:
             if not judge_comment:
                 judge_comment = daemon_state.llm_judge.on_turn(judge_ctx)
 
-        has_content = injection or recap_reminder or selected_context or pattern_text or judge_comment
+        # v4.0: Deep Judge — inject cached result from async evaluation
+        deep_judge_comment = None
+        if daemon_state.deep_judge.enabled:
+            deep_judge_comment = daemon_state.deep_judge.get_cached_result(session_id)
+            if deep_judge_comment:
+                _log(f"DEEP-JUDGE injecting cached result for session={session_id[:8]}")
+
+        has_content = injection or recap_reminder or selected_context or pattern_text or judge_comment or deep_judge_comment
         if not has_content:
             _log(f"session={session_id[:8]} prompt_len={len(prompt)} phase={phase} rules_fired=0")
             return {}
@@ -1192,6 +1234,8 @@ def _process_prompt(event: dict, daemon_state: SidecarState) -> dict:
             context_parts.append(recap_reminder)
         if judge_comment:
             context_parts.append(f"[JUDGE] {judge_comment}")
+        if deep_judge_comment:
+            context_parts.append(f"[DEEP-JUDGE] {deep_judge_comment}")
         context = "\n".join(context_parts)
 
         # Record injection for transparency
@@ -1206,6 +1250,8 @@ def _process_prompt(event: dict, daemon_state: SidecarState) -> dict:
             sources.append("session_limit")
         if judge_comment:
             sources.append("llm_judge")
+        if deep_judge_comment:
+            sources.append("deep_judge")
         daemon_state.record_injection(session_id, "prompt", context, sources)
 
         _log(f"session={session_id[:8]} prompt_len={len(prompt)} phase={phase} rules_fired context_len={len(context)}")
@@ -1263,6 +1309,7 @@ def _handle_command(cmd_data: dict, daemon_state: SidecarState) -> dict:
             "skill_triggers": len(daemon_state.skill_triggers),
             "plugins": len(daemon_state.plugin_loader.plugins),
             "llm_judge": daemon_state.llm_judge.status(),
+            "deep_judge": daemon_state.deep_judge.status(),
         }
 
     elif cmd == "judge":
@@ -1281,6 +1328,8 @@ def _handle_command(cmd_data: dict, daemon_state: SidecarState) -> dict:
                 daemon_state.llm_judge.enabled = bool(daemon_state.llm_judge._api_key)
                 return {"provider": new_provider, "enabled": daemon_state.llm_judge.enabled}
             return {"error": f"Unknown provider: {new_provider}"}
+        elif subcmd == "deep":
+            return daemon_state.deep_judge.status()
         return {"error": f"Unknown judge subcmd: {subcmd}"}
 
     elif cmd == "rules":
@@ -1417,6 +1466,10 @@ def _handle_command(cmd_data: dict, daemon_state: SidecarState) -> dict:
             "injections": daemon_state.injection_history[-20:],
         }
 
+    elif cmd == "reindex":
+        reload_knowledge_index()
+        return {"ok": True, "reindexed": True}
+
     elif cmd == "reload":
         daemon_state.load_companion_files()
         daemon_state.registry._load_overrides()
@@ -1430,7 +1483,8 @@ def _handle_command(cmd_data: dict, daemon_state: SidecarState) -> dict:
 
 async def handle_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter, daemon_state: SidecarState):
     try:
-        data = await asyncio.wait_for(reader.read(65536), timeout=5.0)
+        # Read until EOF (client must shutdown write-end or close)
+        data = await asyncio.wait_for(reader.read(-1), timeout=5.0)
         if not data:
             return
 

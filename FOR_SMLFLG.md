@@ -1,15 +1,17 @@
 # Sidecar — FOR_SMLFLG.md
 
-Samuels Referenz-Dokument fuer das Sidecar-Projekt. Stand: 04. Maerz 2026.
+Samuels Referenz-Dokument fuer das Sidecar-Projekt. Stand: 05. Maerz 2026.
 
 ---
 
 ## Was ist Sidecar?
 
-Ein persistenter Daemon, der Claude Code in Echtzeit ueberwacht und situativ Kontext injiziert. Zwei Hauptfunktionen:
+Ein persistenter Daemon, der Claude Code in Echtzeit ueberwacht und situativ Kontext injiziert. Drei Schichten:
 
-1. **Pattern Detection** — Erkennt Anti-Patterns, Loops, Stalls, Error-Cascades etc. waehrend Claude arbeitet
+1. **Pattern Detection** (deterministisch, $0, ~1ms) — Erkennt Anti-Patterns, Loops, Stalls, Error-Cascades
 2. **Context Injection** — Schiebt situativ passende Regeln, Warnungen und Skill-Vorschlaege in Claude's Kontext (via `additionalContext`)
+3. **Quick Judge** (v3, MiniMax M2.5, ~$0.0002/Call, SYNC) — Bewertet Claude's Arbeitsweise gegen Samuels Regeln mit natuerlichsprachlichem Feedback
+4. **Deep Judge Agent** (v4, MiniMax M2.5 + Function Calling, ~$0.005/Call, ASYNC) — Autonomer Coach-Agent der Samuels Wissensbasis (~652 KB, 48 Dateien) navigiert und personalisiertes Feedback gibt
 
 Dazu: **Voice Bridge** — STT-Daemon der Sprache via Whisper in Text umwandelt und per wtype ins Terminal tippt.
 
@@ -70,9 +72,13 @@ Parallel dazu:
 | `rules/git_safety.py` | 37 | Plugin: Injiziert Safety-Reminder bei gefaehrlichen Git-Ops |
 | `services/sidecar.service` | 15 | systemd User Service fuer Sidecar Daemon |
 | `services/voice-bridge.service` | 17 | systemd User Service fuer Voice Bridge |
+| `llm_judge.py` | 240 | v3 Quick Judge. MiniMax/Gemini Provider, BudgetTracker, 3 Trigger (Detektor/Periodisch/Phase), Caching, Timeout-Safety |
+| `judge_agent.py` | 280 | v4 Deep Judge Agent. Autonomer Coach mit Function Calling, navigiert `knowledge/` Wissensbasis, asyncio.Task im Daemon, DeepBudget ($0.03/Session Cap) |
+| `coaching_rules.txt` | 45 | Komprimierte Arbeitsregeln als System-Prompt fuer Quick Judge |
+| `knowledge/` | — | Wissensbasis: 48 .md/.txt Dateien (~652 KB) aus ChatGPT/Gemini/NotebookLM/Subconsciousness Analysen + knowledge_index.json (14 Topics) |
 | `SETUP.md` | 117 | Installations- und Rollback-Anleitung |
 | `.gitignore` | 16 | Standard Python + Runtime Excludes |
-| **Gesamt** | **~2307** | |
+| **Gesamt** | **~2900** | |
 
 ---
 
@@ -137,10 +143,36 @@ Hot-Reload: `sidecar-ctl reload` oder `kill -HUP <pid>`.
 
 ---
 
+## v4: Deep Judge Agent (Schicht 3)
+
+Autonomer Coach-Agent der Samuels Wissensbasis navigiert. Laeuft ASYNC im Daemon.
+
+**Architektur:**
+```
+Schicht 1: Deterministisch ($0, <1ms, IMMER, SYNC) — Gates + Detektoren
+Schicht 2: Quick Judge ($0.0002/Call, <2s, SYNC) — llm_judge.py [v3]
+Schicht 3: Deep Judge Agent (~$0.005/Call, 5-15s, ASYNC) — judge_agent.py [v4]
+```
+
+**Trigger:** Concern Score >= 3 | Phasenwechsel | Alle ~15 Turns | Session-Start (Turn 0-3)
+
+**Agent-Loop:** MiniMax M2.5 + Function Calling, max 3 Rounds, 15s Timeout
+- `read_file(path, section?)` — Liest .md aus `knowledge/`
+- `search_knowledge(query)` — Durchsucht `knowledge_index.json`
+- `list_topics()` — Zeigt verfuegbare Topics
+
+**Wissensbasis:** `knowledge/` — 48 Dateien, 14 Topics, ~652 KB
+- Tier 1 (immer geladen im System-Prompt): samuel-kontext.md, coaching_rules.txt
+- Tier 2 (on-demand via Tools): ChatGPT, Gemini, NotebookLM, Subconsciousness Analysen
+
+**Budget:** $0.03/Session Cap, getrennt von Quick Judge. Kein API-Key → disabled, v3+v2 laufen weiter.
+
+---
+
 ## sidecar-ctl (ACP CLI)
 
 ```bash
-sidecar-ctl status          # Daemon-Status, Uptime, Rule/Finding Count
+sidecar-ctl status          # Daemon-Status inkl. Quick Judge + Deep Judge
 sidecar-ctl rules           # Alle 22 Rules mit Fires + Last-Fired
 sidecar-ctl rules --group gate  # Nur Gates anzeigen
 sidecar-ctl enable <name>   # Rule aktivieren
@@ -150,6 +182,10 @@ sidecar-ctl sessions        # Alle Sessions mit Call-Count
 sidecar-ctl session <id>    # Session-Details (History, Files)
 sidecar-ctl findings        # Letzte 50 Findings
 sidecar-ctl reload          # Companion Files + Plugins neu laden
+sidecar-ctl reindex         # knowledge_index.json neu laden
+sidecar-ctl judge status    # Quick Judge (v3) Status
+sidecar-ctl judge deep      # Deep Judge (v4) Status
+sidecar-ctl judge toggle    # Quick Judge an/aus
 sidecar-ctl log -n 50       # Letzte 50 Log-Zeilen
 ```
 
@@ -229,13 +265,40 @@ Max 25 History-Eintraege, max 50 Files. Cooldown zwischen Analysen: 15 Sekunden.
 
 ---
 
+## v3: LLM Judge
+
+Seit v3 hat Sidecar eine **LLM-basierte Qualitaetskontrolle** zusaetzlich zur deterministischen Schicht.
+
+**Architektur:**
+```
+Schicht 1: Deterministisch ($0, ~1ms, IMMER)
+  → 6 Gates + 9 Detektoren + Phase Tracker
+  |
+Schicht 2: LLM Judge (~$0.0002/Call, ~1s)
+  → Gemini Flash bewertet Session gegen coaching_rules.txt
+  → 3 Trigger: Detektor-Enrichment, Periodisch (alle 6 Turns), Phasenwechsel
+  → Budget-Cap: $0.05/Tag, Prioritaeten-basierte Drosselung
+```
+
+**Provider:** Gemini Flash (Default, <1s) oder MiniMax (Alternative).
+Kein API-Key = Judge disabled, Sidecar arbeitet wie v2 weiter.
+
+**Steuerung:**
+```bash
+sidecar-ctl judge status     # Judge-Status + Budget
+sidecar-ctl judge toggle     # Ein/Aus
+sidecar-ctl judge provider gemini  # Provider wechseln
+```
+
+---
+
 ## Aktueller Status
 
 - **Stabil**, laeuft als systemd User Service
-- **7 Commits** auf main (chore → feat → docs)
-- **2307 LOC** total (davon 1255 im Kern-Daemon)
+- **~2600 LOC** total
 - **22 registrierte Rules** (7 Pattern + 1 Anti-Pattern + 1 Skill-Suggest + 5 Enforcement + 2 Session-Tracking + 6 Gates)
 - **3 Rule Plugins** (research_first, delegation_check, git_safety)
+- **LLM Judge** (v3) — Gemini Flash als Qualitaetskontrolle
 - **4 Session-Phasen** werden getrackt
 - Rule Overrides persistent in `~/.claude/sidecar-rules.json`
 

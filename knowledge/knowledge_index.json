@@ -1,0 +1,655 @@
+{
+  "version": 1,
+  "generated": "2026-03-05",
+  "topics": {
+    "adhs": {
+      "description": "ADHS-Muster, Hyperfokus, Dopamin, Session-Sprawl",
+      "files": [
+        "chatgpt_PORTRAIT_SAMUEL.md",
+        "samuel-kontext.md",
+        "chatgpt_Workflow.md",
+        "sub_samuel-deep-profile.md",
+        "gemini_Workflow.md"
+      ],
+      "keywords": [
+        "adhs",
+        "hyperfokus",
+        "dopamin",
+        "session-sprawl",
+        "formalia",
+        "aufmerksamkeit",
+        "ablenkung",
+        "fokus"
+      ]
+    },
+    "fehler": {
+      "description": "Fehleranalysen, Learnings, was vermeiden",
+      "files": [
+        "chatgpt_Fehler_und_Learnings.md",
+        "gemini_Fehler_und_Learnings.md",
+        "WelcheFehlerVermeiden.md",
+        "16_OUTAGE_LEARNINGS.md"
+      ],
+      "keywords": [
+        "fehler",
+        "hohenheim",
+        "db",
+        "abbruch",
+        "learnings",
+        "vermeiden",
+        "bug",
+        "outage",
+        "crash"
+      ]
+    },
+    "persoenlichkeit": {
+      "description": "Persoenlichkeitsprofil, Staerken, Schwaechen, ENTP",
+      "files": [
+        "chatgpt_PORTRAIT_SAMUEL.md",
+        "chatgpt_PersonSamuel.md",
+        "gemini_PersonSamuel.md",
+        "sub_samuel-deep-profile.md",
+        "gemini_DEEP_ANALYSIS.md"
+      ],
+      "keywords": [
+        "entp",
+        "persoenlichkeit",
+        "profil",
+        "staerken",
+        "schwaechen",
+        "charakter",
+        "portrait",
+        "analyse"
+      ]
+    },
+    "delegation": {
+      "description": "Delegation, Kosten, Opus/Sonnet/Gemini Architektur",
+      "files": [
+        "chatgpt_Workflow.md",
+        "coaching_rules.txt",
+        "samuel-kontext.md",
+        "gemini_Workflow.md"
+      ],
+      "keywords": [
+        "delegation",
+        "opus",
+        "sonnet",
+        "gemini",
+        "kosten",
+        "architektur",
+        "mcp",
+        "orchestrierung"
+      ]
+    },
+    "kommunikation": {
+      "description": "Kommunikationsstil, Feedback, Direktheit",
+      "files": [
+        "chatgpt_Kommunikation.md",
+        "gemini_Kommunikation.md",
+        "samuel-kontext.md"
+      ],
+      "keywords": [
+        "kommunikation",
+        "feedback",
+        "direkt",
+        "ton",
+        "stil",
+        "sprache"
+      ]
+    },
+    "lernen": {
+      "description": "Lernreise, Autodidakt, Wissenserwerb",
+      "files": [
+        "chatgpt_Lernreise.md",
+        "gemini_Lernreise.md",
+        "chatgpt_Wissenslandkarte.md",
+        "gemini_Wissenslandkarte.md",
+        "01_ExplanationForSamuel.md"
+      ],
+      "keywords": [
+        "lernen",
+        "autodidakt",
+        "wissen",
+        "studium",
+        "hohenheim",
+        "education",
+        "skill"
+      ]
+    },
+    "techstack": {
+      "description": "Technologien, Tools, Python, Docker, APIs",
+      "files": [
+        "chatgpt_TechStack.md",
+        "gemini_TechStack.md",
+        "11_FASTAPI.md",
+        "10_DOCKER.md"
+      ],
+      "keywords": [
+        "python",
+        "docker",
+        "fastapi",
+        "kafka",
+        "elasticsearch",
+        "api",
+        "tech",
+        "stack",
+        "tool"
+      ]
+    },
+    "projekte": {
+      "description": "Projekte, Ideen, Plaene",
+      "files": [
+        "chatgpt_Projekte.md",
+        "gemini_Projekte.md",
+        "chatgpt_Ideen.md",
+        "gemini_Ideen.md",
+        "chatgpt_12_MONATS_PLAN.md"
+      ],
+      "keywords": [
+        "projekt",
+        "idee",
+        "plan",
+        "sidecar",
+        "keepa",
+        "pipeline",
+        "roadmap"
+      ]
+    },
+    "studium": {
+      "description": "Uni Hohenheim, Pruefungen, Formalia",
+      "files": [
+        "chatgpt_Studium.md",
+        "gemini_Studium.md",
+        "06_PRUEFUNGSVORBEREITUNG.md"
+      ],
+      "keywords": [
+        "studium",
+        "hohenheim",
+        "pruefung",
+        "klausur",
+        "uni",
+        "semester",
+        "formalia"
+      ]
+    },
+    "workflow": {
+      "description": "Arbeitsweisen, Session-Hygiene, Fokus, Sprints",
+      "files": [
+        "chatgpt_Workflow.md",
+        "gemini_Workflow.md",
+        "coaching_rules.txt",
+        "18_SESSION_LOG.md"
+      ],
+      "keywords": [
+        "workflow",
+        "session",
+        "fokus",
+        "sprint",
+        "hygiene",
+        "recap",
+        "feierabend",
+        "routine"
+      ]
+    },
+    "coaching": {
+      "description": "Coaching-Regeln, Arbeitsregeln, Anti-Patterns",
+      "files": [
+        "coaching_rules.txt",
+        "samuel-kontext.md",
+        "WelcheFehlerVermeiden.md"
+      ],
+      "keywords": [
+        "coaching",
+        "regeln",
+        "anti-pattern",
+        "rules",
+        "judge",
+        "sidecar"
+      ]
+    },
+    "infrastruktur": {
+      "description": "Docker, Kafka, Elasticsearch, PostgreSQL Setup",
+      "files": [
+        "07_KAFKA.md",
+        "08_ELASTICSEARCH.md",
+        "09_POSTGRESQL.md",
+        "10_DOCKER.md",
+        "11_FASTAPI.md",
+        "14_KIBANA.md"
+      ],
+      "keywords": [
+        "docker",
+        "kafka",
+        "elasticsearch",
+        "postgresql",
+        "fastapi",
+        "infrastruktur",
+        "kibana"
+      ]
+    },
+    "keepa": {
+      "description": "Keepa API, Learnings, Daten-Pipeline",
+      "files": [
+        "12_KEEPA_API.md",
+        "13_KEEPA_API_LEARNINGS.md",
+        "17_project-deep-dive.md"
+      ],
+      "keywords": [
+        "keepa",
+        "api",
+        "amazon",
+        "pipeline",
+        "daten",
+        "scraping"
+      ]
+    },
+    "digitaler_zwilling": {
+      "description": "Digitaler Zwilling, Subconsciousness Projekt",
+      "files": [
+        "sub_samuel-deep-profile.md",
+        "sub_digitaler-zwilling-konzept.md",
+        "sub_daten-inventar.md",
+        "sub_prior-art.md"
+      ],
+      "keywords": [
+        "zwilling",
+        "digital",
+        "subconsciousness",
+        "profil",
+        "inventar",
+        "self"
+      ]
+    }
+  },
+  "files": {
+    "01_ExplanationForSamuel.md": {
+      "source": "notebooklm",
+      "path": "01_ExplanationForSamuel.md",
+      "size_kb": 8.8,
+      "topics": [
+        "lernen"
+      ]
+    },
+    "02_FOR_SMLFLG.md": {
+      "source": "notebooklm",
+      "path": "02_FOR_SMLFLG.md",
+      "size_kb": 60.5,
+      "topics": []
+    },
+    "03_README.md": {
+      "source": "notebooklm",
+      "path": "03_README.md",
+      "size_kb": 11.6,
+      "topics": []
+    },
+    "04_ARCHITECTURE.md": {
+      "source": "notebooklm",
+      "path": "04_ARCHITECTURE.md",
+      "size_kb": 14.2,
+      "topics": []
+    },
+    "05_PIPELINE_FLOW.md": {
+      "source": "notebooklm",
+      "path": "05_PIPELINE_FLOW.md",
+      "size_kb": 14.4,
+      "topics": []
+    },
+    "06_PRUEFUNGSVORBEREITUNG.md": {
+      "source": "notebooklm",
+      "path": "06_PRUEFUNGSVORBEREITUNG.md",
+      "size_kb": 18.6,
+      "topics": [
+        "studium"
+      ]
+    },
+    "07_KAFKA.md": {
+      "source": "notebooklm",
+      "path": "07_KAFKA.md",
+      "size_kb": 12.0,
+      "topics": [
+        "infrastruktur"
+      ]
+    },
+    "08_ELASTICSEARCH.md": {
+      "source": "notebooklm",
+      "path": "08_ELASTICSEARCH.md",
+      "size_kb": 10.0,
+      "topics": [
+        "infrastruktur"
+      ]
+    },
+    "09_POSTGRESQL.md": {
+      "source": "notebooklm",
+      "path": "09_POSTGRESQL.md",
+      "size_kb": 13.5,
+      "topics": [
+        "infrastruktur"
+      ]
+    },
+    "10_DOCKER.md": {
+      "source": "notebooklm",
+      "path": "10_DOCKER.md",
+      "size_kb": 11.2,
+      "topics": [
+        "techstack",
+        "infrastruktur"
+      ]
+    },
+    "11_FASTAPI.md": {
+      "source": "notebooklm",
+      "path": "11_FASTAPI.md",
+      "size_kb": 9.4,
+      "topics": [
+        "techstack",
+        "infrastruktur"
+      ]
+    },
+    "12_KEEPA_API.md": {
+      "source": "notebooklm",
+      "path": "12_KEEPA_API.md",
+      "size_kb": 8.4,
+      "topics": [
+        "keepa"
+      ]
+    },
+    "13_KEEPA_API_LEARNINGS.md": {
+      "source": "notebooklm",
+      "path": "13_KEEPA_API_LEARNINGS.md",
+      "size_kb": 12.1,
+      "topics": [
+        "keepa"
+      ]
+    },
+    "14_KIBANA.md": {
+      "source": "notebooklm",
+      "path": "14_KIBANA.md",
+      "size_kb": 7.5,
+      "topics": [
+        "infrastruktur"
+      ]
+    },
+    "16_OUTAGE_LEARNINGS.md": {
+      "source": "notebooklm",
+      "path": "16_OUTAGE_LEARNINGS.md",
+      "size_kb": 8.9,
+      "topics": [
+        "fehler"
+      ]
+    },
+    "17_project-deep-dive.md": {
+      "source": "notebooklm",
+      "path": "17_project-deep-dive.md",
+      "size_kb": 10.3,
+      "topics": [
+        "keepa"
+      ]
+    },
+    "18_SESSION_LOG.md": {
+      "source": "notebooklm",
+      "path": "18_SESSION_LOG.md",
+      "size_kb": 8.4,
+      "topics": [
+        "workflow"
+      ]
+    },
+    "WelcheFehlerVermeiden.md": {
+      "source": "sidecar",
+      "path": "WelcheFehlerVermeiden.md",
+      "size_kb": 14.2,
+      "topics": [
+        "fehler",
+        "coaching"
+      ]
+    },
+    "chatgpt_12_MONATS_PLAN.md": {
+      "source": "chatgpt_pipeline",
+      "path": "chatgpt_12_MONATS_PLAN.md",
+      "size_kb": 10.6,
+      "topics": [
+        "projekte"
+      ]
+    },
+    "chatgpt_Fehler_und_Learnings.md": {
+      "source": "chatgpt_pipeline",
+      "path": "chatgpt_Fehler_und_Learnings.md",
+      "size_kb": 14.9,
+      "topics": [
+        "fehler"
+      ]
+    },
+    "chatgpt_Ideen.md": {
+      "source": "chatgpt_pipeline",
+      "path": "chatgpt_Ideen.md",
+      "size_kb": 14.0,
+      "topics": [
+        "projekte"
+      ]
+    },
+    "chatgpt_Kommunikation.md": {
+      "source": "chatgpt_pipeline",
+      "path": "chatgpt_Kommunikation.md",
+      "size_kb": 14.5,
+      "topics": [
+        "kommunikation"
+      ]
+    },
+    "chatgpt_Lernreise.md": {
+      "source": "chatgpt_pipeline",
+      "path": "chatgpt_Lernreise.md",
+      "size_kb": 12.9,
+      "topics": [
+        "lernen"
+      ]
+    },
+    "chatgpt_PORTRAIT_SAMUEL.md": {
+      "source": "chatgpt_pipeline",
+      "path": "chatgpt_PORTRAIT_SAMUEL.md",
+      "size_kb": 34.1,
+      "topics": [
+        "adhs",
+        "persoenlichkeit"
+      ]
+    },
+    "chatgpt_PersonSamuel.md": {
+      "source": "chatgpt_pipeline",
+      "path": "chatgpt_PersonSamuel.md",
+      "size_kb": 16.8,
+      "topics": [
+        "persoenlichkeit"
+      ]
+    },
+    "chatgpt_Projekte.md": {
+      "source": "chatgpt_pipeline",
+      "path": "chatgpt_Projekte.md",
+      "size_kb": 9.6,
+      "topics": [
+        "projekte"
+      ]
+    },
+    "chatgpt_Studium.md": {
+      "source": "chatgpt_pipeline",
+      "path": "chatgpt_Studium.md",
+      "size_kb": 11.0,
+      "topics": [
+        "studium"
+      ]
+    },
+    "chatgpt_TechStack.md": {
+      "source": "chatgpt_pipeline",
+      "path": "chatgpt_TechStack.md",
+      "size_kb": 11.3,
+      "topics": [
+        "techstack"
+      ]
+    },
+    "chatgpt_Wissenslandkarte.md": {
+      "source": "chatgpt_pipeline",
+      "path": "chatgpt_Wissenslandkarte.md",
+      "size_kb": 17.3,
+      "topics": [
+        "lernen"
+      ]
+    },
+    "chatgpt_Workflow.md": {
+      "source": "chatgpt_pipeline",
+      "path": "chatgpt_Workflow.md",
+      "size_kb": 14.6,
+      "topics": [
+        "adhs",
+        "delegation",
+        "workflow"
+      ]
+    },
+    "coaching_rules.txt": {
+      "source": "sidecar",
+      "path": "coaching_rules.txt",
+      "size_kb": 2.5,
+      "topics": [
+        "delegation",
+        "workflow",
+        "coaching"
+      ]
+    },
+    "gemini_DEEP_ANALYSIS.md": {
+      "source": "gemini_pipeline",
+      "path": "gemini_DEEP_ANALYSIS.md",
+      "size_kb": 6.9,
+      "topics": [
+        "persoenlichkeit"
+      ]
+    },
+    "gemini_Fehler_und_Learnings.md": {
+      "source": "gemini_pipeline",
+      "path": "gemini_Fehler_und_Learnings.md",
+      "size_kb": 11.2,
+      "topics": [
+        "fehler"
+      ]
+    },
+    "gemini_Ideen.md": {
+      "source": "gemini_pipeline",
+      "path": "gemini_Ideen.md",
+      "size_kb": 11.9,
+      "topics": [
+        "projekte"
+      ]
+    },
+    "gemini_Kommunikation.md": {
+      "source": "gemini_pipeline",
+      "path": "gemini_Kommunikation.md",
+      "size_kb": 7.9,
+      "topics": [
+        "kommunikation"
+      ]
+    },
+    "gemini_Lernreise.md": {
+      "source": "gemini_pipeline",
+      "path": "gemini_Lernreise.md",
+      "size_kb": 10.0,
+      "topics": [
+        "lernen"
+      ]
+    },
+    "gemini_PersonSamuel.md": {
+      "source": "gemini_pipeline",
+      "path": "gemini_PersonSamuel.md",
+      "size_kb": 7.6,
+      "topics": [
+        "persoenlichkeit"
+      ]
+    },
+    "gemini_Projekte.md": {
+      "source": "gemini_pipeline",
+      "path": "gemini_Projekte.md",
+      "size_kb": 13.6,
+      "topics": [
+        "projekte"
+      ]
+    },
+    "gemini_Studium.md": {
+      "source": "gemini_pipeline",
+      "path": "gemini_Studium.md",
+      "size_kb": 11.2,
+      "topics": [
+        "studium"
+      ]
+    },
+    "gemini_TechStack.md": {
+      "source": "gemini_pipeline",
+      "path": "gemini_TechStack.md",
+      "size_kb": 10.9,
+      "topics": [
+        "techstack"
+      ]
+    },
+    "gemini_Wissenslandkarte.md": {
+      "source": "gemini_pipeline",
+      "path": "gemini_Wissenslandkarte.md",
+      "size_kb": 15.6,
+      "topics": [
+        "lernen"
+      ]
+    },
+    "gemini_Workflow.md": {
+      "source": "gemini_pipeline",
+      "path": "gemini_Workflow.md",
+      "size_kb": 10.4,
+      "topics": [
+        "adhs",
+        "delegation",
+        "workflow"
+      ]
+    },
+    "samuel-kontext.md": {
+      "source": "sidecar",
+      "path": "samuel-kontext.md",
+      "size_kb": 2.0,
+      "topics": [
+        "adhs",
+        "delegation",
+        "kommunikation",
+        "coaching"
+      ]
+    },
+    "sub_daten-inventar.md": {
+      "source": "subconsciousness",
+      "path": "sub_daten-inventar.md",
+      "size_kb": 7.5,
+      "topics": [
+        "digitaler_zwilling"
+      ]
+    },
+    "sub_digitaler-zwilling-konzept.md": {
+      "source": "subconsciousness",
+      "path": "sub_digitaler-zwilling-konzept.md",
+      "size_kb": 9.1,
+      "topics": [
+        "digitaler_zwilling"
+      ]
+    },
+    "sub_kanban-gui-entwurf.md": {
+      "source": "subconsciousness",
+      "path": "sub_kanban-gui-entwurf.md",
+      "size_kb": 10.9,
+      "topics": []
+    },
+    "sub_prior-art.md": {
+      "source": "subconsciousness",
+      "path": "sub_prior-art.md",
+      "size_kb": 8.6,
+      "topics": [
+        "digitaler_zwilling"
+      ]
+    },
+    "sub_samuel-deep-profile.md": {
+      "source": "subconsciousness",
+      "path": "sub_samuel-deep-profile.md",
+      "size_kb": 12.0,
+      "topics": [
+        "adhs",
+        "persoenlichkeit",
+        "digitaler_zwilling"
+      ]
+    }
+  }
+}
