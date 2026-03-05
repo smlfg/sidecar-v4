@@ -409,11 +409,25 @@ class SidecarState:
         self._start_ts = time.time()
         self.registry = RuleRegistry()
         self._pending_opencode_fires: dict = {}  # session_id -> call count since last fire
+        self.injection_history: list = []  # Ring buffer, max 100
         # v2.0: Context-aware components
         self.context_selector = ContextSelector()
         self.skill_recommender = SkillRecommender()
         self.session_watcher = SessionWatcher(on_event=self._on_watcher_event)
         self.register_builtin_rules()
+
+    def record_injection(self, session_id, hook_type, context_text, sources):
+        """Record an injection for audit/transparency."""
+        self.injection_history.append({
+            "ts": time.time(),
+            "session_id": session_id[:12] if session_id else "unknown",
+            "hook": hook_type,
+            "text": context_text,
+            "sources": sources,
+            "chars": len(context_text),
+        })
+        if len(self.injection_history) > 100:
+            self.injection_history = self.injection_history[-100:]
 
     def register_builtin_rules(self):
         """Register all built-in rules into the registry."""
@@ -992,6 +1006,7 @@ def _process_event(event: dict, daemon_state: SidecarState) -> dict:
                 lines.append("Strategie ueberdenken.")
 
                 additional_context = "\n".join(lines)
+                daemon_state.record_injection(session_id, "post_tool", additional_context, ["pattern_watcher"])
                 system_message = "[PATTERN WATCHER] " + "; ".join(all_findings[:3])
 
                 result = {
@@ -999,6 +1014,16 @@ def _process_event(event: dict, daemon_state: SidecarState) -> dict:
                     "systemMessage": system_message,
                 }
                 state["last_analysis_ts"] = now
+
+                # Track injection for Live Feed
+                injections = state.setdefault("injection_history", [])
+                injections.append({
+                    "ts": time.time(),
+                    "hook": "PostToolUse",
+                    "context": additional_context,
+                })
+                if len(injections) > 50:
+                    state["injection_history"] = injections[-50:]
 
             _save_session_state(session_id, state)
 
@@ -1111,7 +1136,29 @@ def _process_prompt(event: dict, daemon_state: SidecarState) -> dict:
             context_parts.append(recap_reminder)
         context = "\n".join(context_parts)
 
+        # Record injection for transparency
+        sources = []
+        if selected_context:
+            sources.append("context_selector")
+        if injection:
+            sources.append("plugins")
+        if pattern_text:
+            sources.append("pattern_warnings")
+        if recap_reminder:
+            sources.append("session_limit")
+        daemon_state.record_injection(session_id, "prompt", context, sources)
+
         _log(f"session={session_id[:8]} prompt_len={len(prompt)} phase={phase} rules_fired context_len={len(context)}")
+
+        # Track injection for Live Feed
+        injections = state.setdefault("injection_history", [])
+        injections.append({
+            "ts": time.time(),
+            "hook": "UserPromptSubmit",
+            "context": context,
+        })
+        if len(injections) > 50:
+            state["injection_history"] = injections[-50:]
 
         # Persist phase tracker state
         state["phase_tracker"] = tracker.to_dict()
@@ -1191,17 +1238,17 @@ def _handle_command(cmd_data: dict, daemon_state: SidecarState) -> dict:
                 sid = f.replace("sidecar-", "").replace(".json", "")
                 try:
                     state = _load_session_state(sid)
-                    # Derive project name from files_touched
                     files = state.get("files_touched", [])
-                    project = ""
-                    for fp in files:
-                        if "/Projekte/" in fp:
-                            parts = fp.split("/Projekte/")[1].split("/")
-                            if parts:
-                                project = parts[0]
-                                break
+                    # Use stored project_name (from transcript path), fallback to files_touched
+                    project = state.get("project_name", "")
+                    if not project:
+                        for fp in files:
+                            if "/Projekte/" in fp:
+                                parts = fp.split("/Projekte/")[1].split("/")
+                                if parts:
+                                    project = parts[0]
+                                    break
                     if not project and files:
-                        # Fallback: use deepest common directory name
                         project = os.path.basename(os.path.dirname(files[0]))
                     phase = ""
                     pt = state.get("phase_tracker", {})
@@ -1288,6 +1335,7 @@ def _handle_command(cmd_data: dict, daemon_state: SidecarState) -> dict:
             "rules": daemon_state.registry.all_rules_info(),
             "findings": daemon_state.registry.findings,
             "sessions": sessions,
+            "injections": daemon_state.injection_history[-20:],
         }
 
     elif cmd == "reload":

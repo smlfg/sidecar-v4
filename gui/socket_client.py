@@ -67,21 +67,20 @@ def send_command(cmd_data: dict, callback, error_callback=None) -> None:
         return False
 
     def _on_read(fd, condition):
-        if condition & (GLib.IO_HUP | GLib.IO_ERR):
-            _finish()
-            return False
-        try:
-            chunk = sock.recv(65536)
-            if not chunk:
-                _finish()
-                return False
-            chunks.append(chunk)
-            return True  # keep reading
-        except BlockingIOError:
-            return True
-        except OSError:
-            _finish()
-            return False
+        # IMMER zuerst lesen wenn IO_IN gesetzt — auch wenn IO_HUP gleichzeitig kommt
+        if condition & GLib.IO_IN:
+            try:
+                chunk = sock.recv(65536)
+                if chunk:
+                    chunks.append(chunk)
+                    return True  # weiter lesen
+            except BlockingIOError:
+                return True
+            except OSError:
+                pass
+        # Erst wenn keine Daten mehr kommen (EOF, HUP, ERR): finish
+        _finish()
+        return False
 
     def _finish():
         sock.close()
@@ -101,13 +100,13 @@ def send_command(cmd_data: dict, callback, error_callback=None) -> None:
 
 
 def is_daemon_reachable() -> bool:
-    """Check if the daemon is reachable via Unix socket."""
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.settimeout(0.5)
+    """Check if daemon is reachable by attempting a real socket connection."""
+    import socket as _socket
     try:
-        sock.connect(SOCKET_PATH)
+        s = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+        s.settimeout(0.5)
+        s.connect(SOCKET_PATH)
+        s.close()
         return True
     except OSError:
         return False
-    finally:
-        sock.close()

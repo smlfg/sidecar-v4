@@ -22,6 +22,7 @@ from tabs.status_tab import StatusTab
 from tabs.rules_tab import RulesTab
 from tabs.findings_tab import FindingsTab
 from tabs.sessions_tab import SessionsTab
+from tabs.context_tab import ContextTab
 
 
 class SidecarApp(BaseApp):
@@ -34,6 +35,7 @@ class SidecarApp(BaseApp):
         self._rules_tab = RulesTab(on_action_callback=self._on_rule_action)
         self._findings_tab = FindingsTab()
         self._sessions_tab = SessionsTab()
+        self._context_tab = ContextTab()
 
         self._notebook = None
         self._findings_label = None
@@ -63,6 +65,8 @@ class SidecarApp(BaseApp):
         self._notebook.append_page(self._rules_tab, Gtk.Label(label="Rules"))
         self._notebook.append_page(self._findings_tab, self._findings_label)
         self._notebook.append_page(self._sessions_tab, Gtk.Label(label="Sessions"))
+        self._context_label = Gtk.Label(label="Context")
+        self._notebook.append_page(self._context_tab, self._context_label)
         self._notebook.connect("switch-page", self._on_tab_switch)
 
         self.content_box.pack_start(self._notebook, True, True, 0)
@@ -107,6 +111,9 @@ class SidecarApp(BaseApp):
 
         # Sessions
         self._sessions_tab.update({"sessions": data.get("sessions", [])})
+
+        # Context (injections)
+        self._context_tab.update({"injections": data.get("injections", [])})
 
     def _on_dashboard_error(self, msg):
         """Dashboard failed — show disconnected. No flicker: guard prevents overlap."""

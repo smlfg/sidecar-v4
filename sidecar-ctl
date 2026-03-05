@@ -232,6 +232,56 @@ def cmd_log(args):
         print(line)
 
 
+def cmd_context(args):
+    n = args.n if args.n is not None else 10
+    if args.live:
+        import time as _time
+        seen = 0
+        print("Live injection viewer (Ctrl+C to quit)")
+        print()
+        try:
+            while True:
+                resp = _send_command({"cmd": "dashboard"})
+                injections = resp.get("injections", [])
+                new = injections[seen:]
+                for inj in new:
+                    _print_injection(inj)
+                    seen = len(injections)
+                _time.sleep(2)
+        except KeyboardInterrupt:
+            print("\nStopped.")
+        return
+
+    resp = _send_command({"cmd": "dashboard"})
+    injections = resp.get("injections", [])
+    if not injections:
+        print("No injections recorded yet.")
+        return
+    for inj in injections[-n:]:
+        _print_injection(inj)
+
+
+def _print_injection(inj):
+    ts = inj.get("ts", 0)
+    try:
+        time_str = datetime.fromtimestamp(ts).strftime("%H:%M:%S")
+    except (OSError, ValueError):
+        time_str = "??:??:??"
+    sid = inj.get("session_id", "?")[:8]
+    hook = inj.get("hook", "?")
+    chars = inj.get("chars", 0)
+    sources = ", ".join(inj.get("sources", []))
+    text = inj.get("text", "")
+
+    print(f"[{time_str}] session={sid} hook={hook} ({chars} chars)")
+    if sources:
+        print(f"  Sources: {sources}")
+    print("  ---")
+    for line in text.split("\n"):
+        print(f"  {line}")
+    print()
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="sidecar-ctl",
@@ -276,6 +326,11 @@ def main():
     p_log = subparsers.add_parser("log", help="Show last N lines from sidecar log")
     p_log.add_argument("--lines", "-n", type=int, default=None, help="Number of lines (default 20)")
 
+    # context
+    p_context = subparsers.add_parser("context", help="Show injection history")
+    p_context.add_argument("-n", type=int, default=None, help="Number of entries (default 10)")
+    p_context.add_argument("--live", action="store_true", help="Live polling every 2s")
+
     args = parser.parse_args()
 
     dispatch = {
@@ -289,6 +344,7 @@ def main():
         "findings": cmd_findings,
         "reload": cmd_reload,
         "log": cmd_log,
+        "context": cmd_context,
     }
 
     try:
