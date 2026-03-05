@@ -115,15 +115,49 @@ class ContextTab(Gtk.Box):
 
     def _build_card(self, inj: dict, p: dict) -> Gtk.Box:
         """Build a single injection card widget."""
-        hook = inj.get("hook", "prompt")
-        bar_color = p["accent"] if hook == "prompt" else p["yellow"]
-        hook_badge_cls = "base-badge-ok" if hook == "prompt" else "base-badge-warn"
+        text = inj.get("text", "") or inj.get("context", "")
+        sources = inj.get("sources", [])
+
+        # Detect severity from text content
+        severity = "info"
+        if "[JUDGE]" in text:
+            severity = "judge"
+        elif any(kw in text.upper() for kw in ["BLOCK", "GATE", "VERBOTEN", "NEVER"]):
+            severity = "block"
+        elif any(kw in text.upper() for kw in ["WARN", "ACHTUNG", "SKILL-SUGGEST", "STALL", "LOOP", "READ-STORM"]):
+            severity = "warn"
+
+        severity_colors = {
+            "block": "#f38ba8",  # red
+            "warn": "#f9e2af",   # yellow
+            "judge": "#cba6f7",  # purple/mauve
+            "info": "#89b4fa",   # blue
+        }
+        bar_color = severity_colors[severity]
+
+        # Extract rule name from [RULE: xxx] or [SIDECAR] patterns
+        rule_name = ""
+        reason = ""
+        for line in text.splitlines():
+            if "[RULE:" in line:
+                start = line.index("[RULE:") + 6
+                end = line.index("]", start) if "]" in line[start:] else len(line)
+                rule_name = line[start:end].strip()
+                reason = line[end + 1:].strip() if end + 1 < len(line) else ""
+                break
+            elif line.strip().startswith("- ") and ":" in line:
+                # Pattern like "- LOOP: description"
+                part = line.strip()[2:]
+                colon = part.index(":")
+                rule_name = part[:colon].strip()
+                reason = part[colon + 1:].strip()
+                break
 
         outer = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=0)
 
-        # Colored left bar
+        # Colored left bar (severity)
         bar = Gtk.DrawingArea()
-        bar.set_size_request(3, -1)
+        bar.set_size_request(4, -1)
         bar.connect("draw", self._draw_bar, bar_color)
         outer.pack_start(bar, False, False, 0)
 
@@ -134,7 +168,7 @@ class ContextTab(Gtk.Box):
         content.set_margin_bottom(6)
         content.set_margin_end(6)
 
-        # Top row: time, hook badge, char count, source badges
+        # Top row: time, severity badge, rule name, source badges
         top_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
 
         ts_raw = float(inj.get("ts", 0.0))
@@ -149,43 +183,55 @@ class ContextTab(Gtk.Box):
         )
         top_row.pack_start(time_lbl, False, False, 0)
 
-        hook_lbl = Gtk.Label(label=hook)
-        hook_lbl.get_style_context().add_class("base-badge")
-        hook_lbl.get_style_context().add_class(hook_badge_cls)
-        top_row.pack_start(hook_lbl, False, False, 0)
+        # Severity badge
+        sev_lbl = Gtk.Label(label=severity.upper())
+        sev_lbl.get_style_context().add_class("base-badge")
+        badge_cls = {"block": "base-badge-err", "warn": "base-badge-warn", "judge": "base-badge-warn", "info": "base-badge-ok"}
+        sev_lbl.get_style_context().add_class(badge_cls.get(severity, "base-badge"))
+        top_row.pack_start(sev_lbl, False, False, 0)
 
-        chars = inj.get("chars", 0)
-        chars_lbl = Gtk.Label()
-        chars_lbl.set_markup(
-            f'<span foreground="{p["subtext1"]}" size="small">{chars} chars</span>'
-        )
-        top_row.pack_start(chars_lbl, False, False, 0)
+        # Rule name as prominent header
+        if rule_name:
+            rule_lbl = Gtk.Label()
+            rule_lbl.set_markup(
+                f'<span foreground="{bar_color}" weight="bold" size="small">{GLib.markup_escape_text(rule_name)}</span>'
+            )
+            top_row.pack_start(rule_lbl, False, False, 0)
 
-        for src in inj.get("sources", []):
+        for src in sources:
             src_lbl = Gtk.Label(label=GLib.markup_escape_text(str(src)))
             src_lbl.get_style_context().add_class("base-badge")
             top_row.pack_start(src_lbl, False, False, 0)
 
         content.pack_start(top_row, False, False, 0)
 
-        # Preview: first 2 lines
-        text = inj.get("text", "")
-        lines = text.splitlines()
-        preview_text = "\n".join(lines[:2])
-        if len(lines) > 2:
-            preview_text += f"\n…  ({len(lines) - 2} more lines)"
+        # "Why?" line — the reason/explanation
+        if reason:
+            why_lbl = Gtk.Label()
+            why_lbl.set_markup(
+                f'<span foreground="{p["subtext1"]}" size="small"><b>Warum:</b> {GLib.markup_escape_text(reason)}</span>'
+            )
+            why_lbl.set_xalign(0)
+            why_lbl.set_line_wrap(True)
+            why_lbl.set_max_width_chars(100)
+            content.pack_start(why_lbl, False, False, 0)
+        else:
+            # Fallback: first 2 lines as preview
+            lines = text.splitlines()
+            preview_text = "\n".join(lines[:2])
+            if len(lines) > 2:
+                preview_text += f"\n…  ({len(lines) - 2} more lines)"
+            preview_lbl = Gtk.Label()
+            preview_lbl.set_markup(
+                f'<span foreground="{p["subtext1"]}" font_family="monospace" size="small">'
+                f"{GLib.markup_escape_text(preview_text)}</span>"
+            )
+            preview_lbl.set_xalign(0)
+            preview_lbl.set_line_wrap(True)
+            preview_lbl.set_max_width_chars(100)
+            content.pack_start(preview_lbl, False, False, 0)
 
-        preview_lbl = Gtk.Label()
-        preview_lbl.set_markup(
-            f'<span foreground="{p["subtext1"]}" font_family="monospace" size="small">'
-            f"{GLib.markup_escape_text(preview_text)}</span>"
-        )
-        preview_lbl.set_xalign(0)
-        preview_lbl.set_line_wrap(True)
-        preview_lbl.set_max_width_chars(100)
-        content.pack_start(preview_lbl, False, False, 0)
-
-        # Revealer for full text (hidden by default)
+        # Revealer for full injected text (hidden by default)
         revealer = Gtk.Revealer()
         revealer.set_transition_type(Gtk.RevealerTransitionType.SLIDE_DOWN)
         revealer.set_reveal_child(False)

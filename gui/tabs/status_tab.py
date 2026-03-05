@@ -61,6 +61,9 @@ class StatusTab(Gtk.Box):
             ("plugins", "Plugins"),
             ("patterns", "Patterns"),
             ("skill_triggers", "Skills"),
+            ("judge", "Judge"),
+            ("judge_evals", "Judge Evals"),
+            ("judge_budget", "Judge Budget"),
         ]
 
         for row, (key, label_text) in enumerate(fields):
@@ -137,6 +140,31 @@ class StatusTab(Gtk.Box):
             if key in self._fields:
                 self._fields[key].set_text(str(val))
 
+        # Judge status
+        judge_data = data.get("llm_judge", {})
+        if judge_data and "judge" in self._fields:
+            judge_enabled = judge_data.get("enabled", False)
+            judge_provider = judge_data.get("provider", "?")
+            judge_color = p["green"] if judge_enabled else p["dim"]
+            judge_label = f"{judge_provider}" if judge_enabled else "disabled"
+            self._fields["judge"].set_markup(
+                f'<span foreground="{judge_color}" font_family="monospace">{judge_label}</span>'
+            )
+
+            budget = judge_data.get("budget", {})
+            evals = budget.get("calls", 0)
+            errors = judge_data.get("error_count", 0) if "error_count" in judge_data else 0
+            self._fields["judge_evals"].set_text(f"{evals} calls")
+
+            spent = budget.get("spent", 0)
+            limit = budget.get("limit", 0)
+            pct = budget.get("pct", 0)
+            budget_color = p["green"] if pct < 60 else (p["yellow"] if pct < 90 else p["red"])
+            self._fields["judge_budget"].set_markup(
+                f'<span foreground="{budget_color}" font_family="monospace">'
+                f'${spent:.4f} / ${limit:.2f} ({pct:.0f}%)</span>'
+            )
+
         # Format uptime
         uptime_s = data.get("uptime_s", 0)
         if uptime_s:
@@ -153,6 +181,6 @@ class StatusTab(Gtk.Box):
         self._fields["status"].set_markup(
             f'<span foreground="{p["red"]}" font_family="monospace">disconnected</span>'
         )
-        for key in ("pid", "uptime", "rule_count", "total_findings", "plugins", "patterns", "skill_triggers"):
+        for key in ("pid", "uptime", "rule_count", "total_findings", "plugins", "patterns", "skill_triggers", "judge", "judge_evals", "judge_budget"):
             if key in self._fields:
                 self._fields[key].set_text("--")

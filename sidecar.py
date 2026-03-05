@@ -24,6 +24,7 @@ from phase_tracker import PhaseTracker
 from session_watcher import SessionWatcher
 from context_selector import ContextSelector
 from skill_recommender import SkillRecommender
+from llm_judge import LLMJudge
 
 # --- Config ---
 SOCKET_PATH = "/tmp/claude-sidecar.sock"
@@ -414,6 +415,9 @@ class SidecarState:
         self.context_selector = ContextSelector()
         self.skill_recommender = SkillRecommender()
         self.session_watcher = SessionWatcher(on_event=self._on_watcher_event)
+        # v3.0: LLM Judge — quality control via cheap LLM
+        _rules_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "coaching_rules.txt")
+        self.llm_judge = LLMJudge(rules_path=_rules_path)
         self.register_builtin_rules()
 
     def record_injection(self, session_id, hook_type, context_text, sources):
@@ -1005,8 +1009,28 @@ def _process_event(event: dict, daemon_state: SidecarState) -> dict:
                     lines.append(f"  - {f}")
                 lines.append("Strategie ueberdenken.")
 
+                # v3.0: LLM Judge enrichment for detector findings
+                judge_comment = None
+                if daemon_state.llm_judge.enabled and concerns:
+                    tracker = daemon_state.get_phase_tracker(session_id, state)
+                    judge_ctx = {
+                        "phase": tracker.current_phase,
+                        "total_calls": state.get("total_calls", 0),
+                        "history": state.get("history", []),
+                    }
+                    # Enrich first concern with LLM
+                    det_type = concerns[0].split(":")[0] if ":" in concerns[0] else concerns[0][:20]
+                    judge_comment = daemon_state.llm_judge.on_detector_fired(
+                        det_type, concerns[0], judge_ctx
+                    )
+                if judge_comment:
+                    lines.append(f"[JUDGE] {judge_comment}")
+
                 additional_context = "\n".join(lines)
-                daemon_state.record_injection(session_id, "post_tool", additional_context, ["pattern_watcher"])
+                sources = ["pattern_watcher"]
+                if judge_comment:
+                    sources.append("llm_judge")
+                daemon_state.record_injection(session_id, "post_tool", additional_context, sources)
                 system_message = "[PATTERN WATCHER] " + "; ".join(all_findings[:3])
 
                 result = {
@@ -1057,11 +1081,24 @@ def _process_prompt(event: dict, daemon_state: SidecarState) -> dict:
         # Load session state (read-only, no lock needed for prompt processing)
         state = _load_session_state(session_id)
 
+        # Seed project_name and start_ts from transcript_path if not yet set
+        needs_save = False
+        if not state.get("project_name"):
+            tp = event.get("transcript_path", "")
+            if tp:
+                state["project_name"] = _extract_project_name(tp)
+                needs_save = True
+        if state.get("session_start_ts", 0) == 0:
+            state["session_start_ts"] = int(time.time())
+            needs_save = True
+
         # Track recap_done: if prompt contains /recap or /learn, mark done
         prompt_lower = prompt.lower()
         if "/recap" in prompt_lower or "/learn" in prompt_lower:
             state["recap_done"] = True
-            # Save the recap_done flag
+            needs_save = True
+
+        if needs_save:
             lock_file = None
             try:
                 lock_file = open(_lock_path(session_id), "w")
@@ -1119,7 +1156,26 @@ def _process_prompt(event: dict, daemon_state: SidecarState) -> dict:
                 "bevor du weiterarbeitest. Session-Hygiene verhindert Kontext-Verlust."
             )
 
-        has_content = injection or recap_reminder or selected_context or pattern_text
+        # v3.0: LLM Judge — periodic check + phase change
+        judge_comment = None
+        if daemon_state.llm_judge.enabled:
+            judge_ctx = {
+                "phase": phase,
+                "total_calls": state.get("total_calls", 0),
+                "history": state.get("history", []),
+            }
+            # Check for phase change
+            old_phase = daemon_state.llm_judge._last_phase
+            if old_phase and old_phase != phase:
+                judge_comment = daemon_state.llm_judge.on_phase_change(
+                    old_phase, phase, judge_ctx
+                )
+            daemon_state.llm_judge._last_phase = phase
+            # Periodic check (if no phase-change comment)
+            if not judge_comment:
+                judge_comment = daemon_state.llm_judge.on_turn(judge_ctx)
+
+        has_content = injection or recap_reminder or selected_context or pattern_text or judge_comment
         if not has_content:
             _log(f"session={session_id[:8]} prompt_len={len(prompt)} phase={phase} rules_fired=0")
             return {}
@@ -1134,6 +1190,8 @@ def _process_prompt(event: dict, daemon_state: SidecarState) -> dict:
             context_parts.append(pattern_text)
         if recap_reminder:
             context_parts.append(recap_reminder)
+        if judge_comment:
+            context_parts.append(f"[JUDGE] {judge_comment}")
         context = "\n".join(context_parts)
 
         # Record injection for transparency
@@ -1146,6 +1204,8 @@ def _process_prompt(event: dict, daemon_state: SidecarState) -> dict:
             sources.append("pattern_warnings")
         if recap_reminder:
             sources.append("session_limit")
+        if judge_comment:
+            sources.append("llm_judge")
         daemon_state.record_injection(session_id, "prompt", context, sources)
 
         _log(f"session={session_id[:8]} prompt_len={len(prompt)} phase={phase} rules_fired context_len={len(context)}")
@@ -1202,7 +1262,26 @@ def _handle_command(cmd_data: dict, daemon_state: SidecarState) -> dict:
             "patterns": len(daemon_state.anti_patterns),
             "skill_triggers": len(daemon_state.skill_triggers),
             "plugins": len(daemon_state.plugin_loader.plugins),
+            "llm_judge": daemon_state.llm_judge.status(),
         }
+
+    elif cmd == "judge":
+        subcmd = cmd_data.get("subcmd", "status")
+        if subcmd == "status":
+            return daemon_state.llm_judge.status()
+        elif subcmd == "toggle":
+            daemon_state.llm_judge.enabled = not daemon_state.llm_judge.enabled
+            _log(f"LLM Judge toggled: {daemon_state.llm_judge.enabled}")
+            return {"enabled": daemon_state.llm_judge.enabled}
+        elif subcmd == "provider":
+            new_provider = cmd_data.get("provider", "")
+            if new_provider in ("gemini", "minimax"):
+                daemon_state.llm_judge.provider = new_provider
+                daemon_state.llm_judge._api_key = daemon_state.llm_judge._find_api_key()
+                daemon_state.llm_judge.enabled = bool(daemon_state.llm_judge._api_key)
+                return {"provider": new_provider, "enabled": daemon_state.llm_judge.enabled}
+            return {"error": f"Unknown provider: {new_provider}"}
+        return {"error": f"Unknown judge subcmd: {subcmd}"}
 
     elif cmd == "rules":
         group = cmd_data.get("group", "")
